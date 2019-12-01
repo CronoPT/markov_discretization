@@ -90,11 +90,11 @@ class map_discretizer {
 	}
 
 	double pixel_x_to_coordinate(int x) {
-		return x*_map.info.resolution - _map.info.origin.position.x;
+		return x*_map.info.resolution + _map.info.origin.position.x;
 	}
 
 	double pixel_y_to_coordinate(int y) {
-		return y*_map.info.resolution - _map.info.origin.position.y;
+		return y*_map.info.resolution + _map.info.origin.position.y;
 	}
 
 	int discretized_grid_size_x() {
@@ -120,10 +120,10 @@ class map_discretizer {
 
 		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
 			for(int x=0; x<discretized_grid_size_x(); x++, i++) {
-				init_square_x = pixel_x_to_coordinate( (_init_x+x)*pixels_per_square );
-				init_square_y = pixel_y_to_coordinate( (_init_y+y)*pixels_per_square );
-				final_square_x = pixel_x_to_coordinate( (_init_x+x+1)*pixels_per_square );
-				final_square_y = pixel_y_to_coordinate( (_init_y+y+1)*pixels_per_square );
+				init_square_x = pixel_x_to_coordinate( _init_x + (x*pixels_per_square));
+				init_square_y = pixel_y_to_coordinate( _init_y + (y*pixels_per_square));
+				final_square_x = pixel_x_to_coordinate( _init_x + (x+1)*pixels_per_square);
+				final_square_y = pixel_y_to_coordinate( _init_y + (y+1)*pixels_per_square);
 				coord_x = (init_square_x+final_square_x)/2;
 				coord_y = (init_square_y+final_square_y)/2;
 				std::cout << "|" << std::setprecision(2) << std::fixed;
