@@ -19,6 +19,13 @@
 
 #include "nav_msgs/GetMap.h"
 
+#define RED   0
+#define GREEN 1
+#define ORANG 2
+#define BLACK 3
+#define OCCUP 4
+#define FREE  5
+
 class map_discretizer {
 	nav_msgs::OccupancyGrid _map;
 	int _init_x;
@@ -26,6 +33,9 @@ class map_discretizer {
 	int _final_x;
 	int _final_y;
 	double _cell_size;
+	int _scale;
+	char** _square_colors;
+	char** _pixel_colors;
 
 	void compute_init_x() {
 		for(int x=0; x<_map.info.width; x++)
@@ -67,12 +77,11 @@ class map_discretizer {
 		return (x>=_init_x && x<=_final_x && y>=_init_y && y<=_final_y);
 	}
 
-	
-
 	public:
-	map_discretizer(nav_msgs::OccupancyGrid map, double cell_size):
+	map_discretizer(nav_msgs::OccupancyGrid map, double cell_size, int scale):
 		_map(map), _init_x(-1), _init_y(-1),
-		_final_x(-1), _final_y(-1), _cell_size(cell_size) { 
+		_final_x(-1), _final_y(-1), _cell_size(cell_size), _scale(scale),
+		_square_colors(nullptr), _pixel_colors(nullptr) { 
 		compute_init_x();
 		compute_init_y();
 		compute_final_x();
@@ -137,10 +146,12 @@ class map_discretizer {
 	void paint_map(const std::string& path) {
 		std::ofstream img(path);
 		img << "P3" << std::endl;
-		img << _map.info.width << " " << _map.info.height << std::endl;
+		img << _map.info.width*_scale << " " << _map.info.height*_scale << std::endl;
 		img << "255" << std::endl; 
 		for(int y=_map.info.height-1; y>=0; y--) {
-			for(int x=0; x<_map.info.width; x++) {
+			for(int sy=0; sy<_scale; sy++)
+			for(int x=0; x<_map.info.width; x++)
+			for(int sx=0; sx<_scale; sx++) {
 				if(x==_init_x && y==_init_y) {
 					img << 0 << " " << 0 << " " << 255 << std::endl;
 				}
@@ -165,12 +176,14 @@ class map_discretizer {
 	void paint_chess_map(const std::string& path) {
 		std::ofstream img(path);
 		img << "P3" << std::endl;
-		img << _map.info.width << " " << _map.info.height << std::endl;
+		img << _map.info.width*_scale << " " << _map.info.height*_scale << std::endl;
 		img << "255" << std::endl; 
 		ROS_INFO("Size of each cell in pixels -> %d", (int)(_cell_size/_map.info.resolution + 1));
 
 		for(int y=_map.info.height-1; y>=0; y--) {
-			for(int x=0; x<_map.info.width; x++) {
+			for(int sy=0; sy<_scale; sy++)
+			for(int x=0; x<_map.info.width; x++) 
+			for(int sx=0; sx<_scale; sx++) {
 				if(point_within_bounds(x, y)) {
 					if(_map.data[y*_map.info.height+x] == 0) {
 						if( (((int)(x-_init_x))%((int) (2*_cell_size/_map.info.resolution + 1))) > _cell_size/_map.info.resolution ) {
@@ -203,6 +216,114 @@ class map_discretizer {
 		}
 	}
 
+	void determine_square_colors() {
+		for(int y=discretized_grid_size_y()-1; y>=0; y--)
+			for(int x=0; x<discretized_grid_size_x(); x++)
+				_square_colors[x][y] = determine_color_of_square(x, y);
+	}
+
+	void determine_pixel_colors() {
+		for(int x=0; x<_map.info.width; x++) {
+			for(int y=0; y<_map.info.height; y++) {
+				if(point_within_bounds(x, y)) {
+					auto square = determine_square_of_pixel(x, y);
+					int x_square = square.first;
+					int y_square = square.second;
+					if(_square_colors[x_square][y_square]==BLACK) {
+						_pixel_colors[x][y] = BLACK;
+					}
+					else if(x_square%2==0 && y_square%2==0) {
+						_pixel_colors[x][y] = RED;
+					}
+					else if(x_square%2==0 && y_square%2!=0) {
+						_pixel_colors[x][y] = GREEN;
+					}
+					else if(x_square%2!=0 && y_square%2!=0) {
+						_pixel_colors[x][y] = RED;
+					}
+					else if(x_square%2!=0 && y_square%2==0) {
+						_pixel_colors[x][y] = GREEN;
+					}
+				}
+				else if(_map.data[y*_map.info.height+x] == -1) {
+					_pixel_colors[x][y] = ORANG;
+				}
+				else if(_map.data[y*_map.info.height+x] == 100) {
+					_pixel_colors[x][y] = BLACK;
+				}
+			}
+		}
+	}
+
+	std::pair<int, int> determine_square_of_pixel(int x, int y) {
+		int x_delocation = x-_init_x;
+		int y_delocation = y-_init_y;
+		int x_square = x_delocation/(((double)_cell_size/_map.info.resolution));
+		int y_square = y_delocation/(((double)_cell_size/_map.info.resolution));
+		std::pair<int, int> res(x_square, y_square);
+		return res;
+	}
+
+	//FIXME
+	int determine_color_of_square(int x, int y) {
+		int pixels_per_square = _cell_size/_map.info.resolution + 1;
+		int init_square_x = _init_x + (x*pixels_per_square);
+		int init_square_y = _init_y + (y*pixels_per_square);
+		int final_square_x = _init_x + (x+1)*pixels_per_square;
+		int final_square_y = _init_y + (y+1)*pixels_per_square;
+		double coord_x = 0;
+		double coord_y = 0;
+		for(int i=init_square_x; i<final_square_x; i++) {
+			for(int j=init_square_y; j<final_square_y; j++) {
+				if(_map.data[j*_map.info.height+i] == -1 || _map.data[j*_map.info.height+i] == 100 )
+					return BLACK;
+			}
+		}
+		return FREE;
+	}
+
+	void paint_chess_filtered_map(const std::string& path) {
+		_square_colors = new char*[discretized_grid_size_x()];
+		for(int i=0; i<discretized_grid_size_x(); i++) { _square_colors[i] = new char[discretized_grid_size_y()]; }
+
+		_pixel_colors = new char*[_map.info.width];
+		for(int i=0; i<_map.info.width; i++) { _pixel_colors[i] = new char[_map.info.height]; }
+
+		determine_square_colors();
+		determine_pixel_colors();
+
+		std::ofstream img(path);
+		img << "P3" << std::endl;
+		img << _map.info.width*_scale << " " << _map.info.height*_scale << std::endl;
+		img << "255" << std::endl; 
+		ROS_INFO("Size of each cell in pixels -> %d", (int)(_cell_size/_map.info.resolution + 1));	
+
+		for(int y=_map.info.height-1; y>=0; y--) {
+			for(int sy=0; sy<_scale; sy++)
+			for(int x=0; x<_map.info.width; x++) 
+			for(int sx=0; sx<_scale; sx++) {
+				if(_pixel_colors[x][y] == BLACK) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == ORANG) {
+					img << 235 << " " << 158 << " " << 52 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == RED) {
+					img << 117 << " " << 255 << " " << 168 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == GREEN) {
+					img << 255 << " " << 117 << " " << 117 << std::endl;
+				}
+			}
+		}
+
+		for(int i=0; i<discretized_grid_size_x(); i++) { delete _square_colors[i]; }
+		delete _square_colors;
+
+		for(int i=0; i<_map.info.width; i++) { delete _pixel_colors[i]; }
+		delete _pixel_colors;
+	}
+
 };
 
 int main(int argc, char* argv[]) {
@@ -221,11 +342,12 @@ int main(int argc, char* argv[]) {
 
 	ROS_INFO("Received");
 	
-	map_discretizer m_d(resp.map, 0.3);
-	m_d.paint_chess_map("mapina.ppm");
+	map_discretizer m_d(resp.map, 0.3, 5);
+	m_d.paint_chess_filtered_map("filtered_map.ppm");
+	m_d.paint_chess_map("squared_map.ppm");
+	m_d.paint_map("normal_map.ppm");
 	m_d.print_info();
 	m_d.print_position_of_pixel(100, 100);
-	m_d.compute_network();
 	ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
 
 
