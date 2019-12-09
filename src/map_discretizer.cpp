@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 #include <utility>
+#include <eigen3/Eigen/Dense>
+
 
 #include "ros/ros.h"
 #include "ros/console.h"
@@ -19,12 +21,40 @@
 
 #include "nav_msgs/GetMap.h"
 
+#define SUCC 0.8
+#define FAIL 0.2/3
+
 #define RED   0
 #define GREEN 1
 #define ORANG 2
 #define BLACK 3
 #define OCCUP 4
 #define FREE  5
+
+#define UP    "UP"
+#define DOWN  "DOWN"
+#define RIGHT "RIGHT"
+#define LEFT  "LEFT"
+
+class mdp {
+	std::vector<std::pair<float, float>> _states;
+	int _height;
+	int _width;
+	std::vector<std::string> _actions = {UP, DOWN, RIGHT, LEFT};
+	std::vector<Eigen::MatrixXd> _transitions;
+	Eigen::MatrixXd _rewards;
+	float _gamma;
+	float _succ;
+	float _fail;
+
+	public:
+	mdp(std::vector<std::pair<float, float>> states, int height, int width, Eigen::MatrixXd rewards, float gamma):
+		_states(states), _height(height), _width(width), _rewards(rewards), _gamma(gamma) {
+		_succ = SUCC;
+		_fail = FAIL;
+	}
+
+};
 
 class map_discretizer {
 	nav_msgs::OccupancyGrid _map;
@@ -86,6 +116,19 @@ class map_discretizer {
 		compute_init_y();
 		compute_final_x();
 		compute_final_y();
+		_square_colors = new char*[discretized_grid_size_x()];
+		for(int i=0; i<discretized_grid_size_x(); i++) { _square_colors[i] = new char[discretized_grid_size_y()]; }
+
+		_pixel_colors = new char*[_map.info.width];
+		for(int i=0; i<_map.info.width; i++) { _pixel_colors[i] = new char[_map.info.height]; }
+	}
+
+	~map_discretizer() {
+		for(int i=0; i<discretized_grid_size_x(); i++) { delete _square_colors[i]; }
+		delete _square_colors;
+
+		for(int i=0; i<_map.info.width; i++) { delete _pixel_colors[i]; }
+		delete _pixel_colors;
 	}
 
 	void print_info() {
@@ -114,8 +157,18 @@ class map_discretizer {
 		return (_final_y - _init_y)*_map.info.resolution/_cell_size + 1;
 	}
 
+	int num_free_squares() {
+		int res = 0;
+		determine_square_colors();
+		for(int y=discretized_grid_size_y()-1; y>=0; y--)
+			for(int x=0; x<discretized_grid_size_x(); x++)
+				if(_square_colors[x][y] != BLACK)
+					res++;
+		return res;
+	}
+
 	void compute_network() {
-		std::vector<std::pair<int, int>> states;
+		determine_square_colors();
 
 		double init_square_x = 0;
 		double init_square_y = 0;
@@ -135,8 +188,13 @@ class map_discretizer {
 				final_square_y = pixel_y_to_coordinate( _init_y + (y+1)*pixels_per_square);
 				coord_x = (init_square_x+final_square_x)/2;
 				coord_y = (init_square_y+final_square_y)/2;
-				std::cout << "|" << std::setprecision(2) << std::fixed;
-				std::cout << coord_x << " " << coord_y; 
+				if(_square_colors[x][y] != BLACK ) {
+					std::cout << "| " << std::setprecision(2) << std::fixed;
+					std::cout << coord_x << " " << coord_y; 
+				}
+				else {
+					std::cout << "| OCCUPIED ";
+				}
 			}
 			std::cout << std::endl;
 		}
@@ -283,11 +341,6 @@ class map_discretizer {
 	}
 
 	void paint_chess_filtered_map(const std::string& path) {
-		_square_colors = new char*[discretized_grid_size_x()];
-		for(int i=0; i<discretized_grid_size_x(); i++) { _square_colors[i] = new char[discretized_grid_size_y()]; }
-
-		_pixel_colors = new char*[_map.info.width];
-		for(int i=0; i<_map.info.width; i++) { _pixel_colors[i] = new char[_map.info.height]; }
 
 		determine_square_colors();
 		determine_pixel_colors();
@@ -316,12 +369,259 @@ class map_discretizer {
 				}
 			}
 		}
+	}
 
-		for(int i=0; i<discretized_grid_size_x(); i++) { delete _square_colors[i]; }
-		delete _square_colors;
+	std::vector<std::pair<float, float>> build_states_for_mdp() {
+		std::vector<std::pair<float, float>> states;
+		determine_square_colors();
 
-		for(int i=0; i<_map.info.width; i++) { delete _pixel_colors[i]; }
-		delete _pixel_colors;
+		double init_square_x = 0;
+		double init_square_y = 0;
+		double final_square_x = 0;
+		double final_square_y = 0;
+		double coord_x = 0;
+		double coord_y = 0;
+		int pixels_per_square = _cell_size/_map.info.resolution + 1;
+		int i = 0;
+
+
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++, i++) {
+				init_square_x = pixel_x_to_coordinate( _init_x + (x*pixels_per_square));
+				init_square_y = pixel_y_to_coordinate( _init_y + (y*pixels_per_square));
+				final_square_x = pixel_x_to_coordinate( _init_x + (x+1)*pixels_per_square);
+				final_square_y = pixel_y_to_coordinate( _init_y + (y+1)*pixels_per_square);
+				coord_x = (init_square_x+final_square_x)/2;
+				coord_y = (init_square_y+final_square_y)/2;
+				if(_square_colors[x][y] != BLACK )
+					states.push_back(std::pair<float, float>(coord_x, coord_y));
+			}
+		}
+		return states;
+	}
+
+	std::vector<Eigen::MatrixXd> build_transitions_for_mdp() {
+		std::vector<Eigen::MatrixXd> transitions;
+		transitions.push_back(build_up_transition());
+		transitions.push_back(build_down_transition());
+		transitions.push_back(build_right_transition());
+		transitions.push_back(build_left_transition());
+		return transitions;	
+	}
+
+	int get_index_of_state_square(int x, int y) {
+		int res = 0;
+		for(int yi=discretized_grid_size_y()-1; yi>=0; yi--) {
+			for(int xi=0; xi<discretized_grid_size_x(); xi++) { 
+				if(xi==x && yi==y) { return res; }
+				if(_square_colors[xi][yi] != BLACK) { res++; } 
+			}
+		}
+	}
+
+	Eigen::MatrixXd build_up_transition() {
+		int squares = num_free_squares();
+		Eigen::MatrixXd up(squares, squares);
+		std::cout << squares << std::endl;
+		float sum = 0;
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++) {
+				if(_square_colors[x][y] == BLACK) { continue; }
+				
+				//can't go up
+				if(y == discretized_grid_size_y()-1 || _square_colors[x][y+1] == BLACK) {
+					sum += SUCC;
+				}
+				else {
+					up(get_index_of_state_square(x, y), 
+					   get_index_of_state_square(x, y+1)) = SUCC;
+				}
+
+				//can't go down
+				if(y == 0 || _square_colors[x][y-1] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					up(get_index_of_state_square(x, y), 
+					   get_index_of_state_square(x, y-1)) = FAIL;
+				}
+
+				//can't go right
+				if(x == discretized_grid_size_x()-1 || _square_colors[x+1][y] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					up(get_index_of_state_square(x, y), 
+					   get_index_of_state_square(x+1, y)) = FAIL;
+				}
+
+				//can't go left
+				if(x == 0 || _square_colors[x-1][y] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					up(get_index_of_state_square(x, y), 
+					   get_index_of_state_square(x-1, y)) = FAIL;
+				}
+			}
+			if(_square_colors[y][y] != BLACK)
+				up(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
+			sum = 0;
+		}
+		return up;
+	}
+
+	Eigen::MatrixXd build_down_transition() {
+		int squares = num_free_squares();
+		Eigen::MatrixXd down(squares, squares);
+		float sum = 0;
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++) {
+				if(_square_colors[x][y] == BLACK) { continue; }
+
+				//can't go up
+				if(y == discretized_grid_size_y()-1 || _square_colors[x][y+1] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					down(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x, y+1)) = FAIL;
+				}
+
+				//can't go down
+				if(y == 0 || _square_colors[x][y-1] == BLACK) {
+					sum += SUCC; 
+				}
+				else {
+					down(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x, y-1)) = SUCC;
+				}
+
+				//can't go right
+				if(x == discretized_grid_size_x()-1 || _square_colors[x+1][y] == BLACK) {
+					sum += FAIL; 
+				}
+				else {
+					down(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x+1, y)) = FAIL;
+				}
+
+				//can't go left
+				if(x == 0 || _square_colors[x-1][y] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					down(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x-1, y)) = FAIL;
+				}
+			}
+			if(_square_colors[y][y] != BLACK)
+				down(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
+			sum = 0;
+		}
+		return down;	
+	}
+
+	Eigen::MatrixXd build_right_transition() {
+		int squares = num_free_squares();
+		Eigen::MatrixXd right(squares, squares);
+		float sum = 0;
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++) {
+				if(_square_colors[x][y] == BLACK) { continue; }
+
+				//can't go up
+				if(y == discretized_grid_size_y()-1 || _square_colors[x][y+1] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					right(get_index_of_state_square(x, y), 
+					      get_index_of_state_square(x, y+1)) = FAIL;
+				}
+
+				//can't go down
+				if(y == 0 || _square_colors[x][y-1] == BLACK) {
+					sum += FAIL; 
+				}
+				else {
+					right(get_index_of_state_square(x, y), 
+					      get_index_of_state_square(x, y-1)) = FAIL;
+				}
+
+				//can't go right
+				if(x == discretized_grid_size_x()-1 || _square_colors[x+1][y] == BLACK) {
+					sum += SUCC; 
+				}
+				else {
+					right(get_index_of_state_square(x, y),
+					      get_index_of_state_square(x+1, y)) = SUCC;
+				}
+
+				//can't go left
+				if(x == 0 || _square_colors[x-1][y] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					right(get_index_of_state_square(x, y), 
+					      get_index_of_state_square(x-1, y)) = FAIL;
+				}
+			}
+			if(_square_colors[y][y] != BLACK)
+				right(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
+			sum = 0;
+		}
+		return right;
+	}
+
+	Eigen::MatrixXd build_left_transition() {
+		int squares = num_free_squares();
+		Eigen::MatrixXd left(squares, squares);
+		float sum = 0;
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++) {
+				if(_square_colors[x][y] == BLACK) { continue; }
+
+				//can't go up
+				if(y == discretized_grid_size_y()-1 || _square_colors[x][y+1] == BLACK) {
+					sum += FAIL;
+				}
+				else {
+					left(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x, y+1)) = FAIL;
+				}
+
+				//can't go down
+				if(y == 0 || _square_colors[x][y-1] == BLACK) {
+					sum += FAIL; 
+				}
+				else {
+					left(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x, y-1)) = FAIL;
+				}
+
+				//can't go right
+				if(x == discretized_grid_size_x()-1 || _square_colors[x+1][y] == BLACK) {
+					sum += FAIL; 
+				}
+				else {
+					left(get_index_of_state_square(x, y),
+					     get_index_of_state_square(x+1, y)) = FAIL;
+				}
+
+				//can't go left
+				if(x == 0 || _square_colors[x-1][y] == BLACK) {
+					sum += SUCC;
+				}
+				else {
+					left(get_index_of_state_square(x, y), 
+					     get_index_of_state_square(x-1, y)) = SUCC;
+				}
+			}
+			if(_square_colors[y][y] != BLACK)
+				left(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
+			sum = 0;
+		}
+		return left;
 	}
 
 };
@@ -343,13 +643,27 @@ int main(int argc, char* argv[]) {
 	ROS_INFO("Received");
 	
 	map_discretizer m_d(resp.map, 0.3, 5);
-	m_d.paint_chess_filtered_map("filtered_map.ppm");
-	m_d.paint_chess_map("squared_map.ppm");
-	m_d.paint_map("normal_map.ppm");
-	m_d.print_info();
-	m_d.print_position_of_pixel(100, 100);
-	ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
+	//m_d.paint_chess_filtered_map("filtered_map.ppm");
+	//m_d.paint_chess_map("squared_map.ppm");
+	//m_d.paint_map("normal_map.ppm");
+	//m_d.print_position_of_pixel(100, 100);
+	m_d.compute_network();
+	//ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
+	
+	std::vector<Eigen::MatrixXd> matrixes = m_d.build_transitions_for_mdp();
+	std::vector<std::pair<float, float>> states = m_d.build_states_for_mdp();
 
+	for(auto m : matrixes) {
+		//std::cout << m << std::endl;
+		std::cout << m.rows() << " " << m.cols() << std::endl;
+	}
+	
+	std::cout << states.size() << std::endl;
+
+	// int i = 0;
+	// for(auto p : states) {
+	// 	std::cout << "State -> " << i++ << " <-> " << p.first << " -- " << p.second << std::endl;
+	// }
 
 	ROS_INFO("Finished");
 
