@@ -6,6 +6,7 @@
 #include <vector>
 #include <utility>
 #include <eigen3/Eigen/Dense>
+#include <math.h>
 
 
 #include "ros/ros.h"
@@ -21,8 +22,8 @@
 
 #include "nav_msgs/GetMap.h"
 
-#define SUCC 0.8
-#define FAIL 0.2/3
+#define SUCC 0.79
+#define FAIL 0.07
 
 #define RED   0
 #define GREEN 1
@@ -41,16 +42,71 @@
 ===================================================================*/
 class mdp {
 	std::vector<std::pair<float, float>> _states;
-	std::vector<std::string> _actions = {UP, DOWN, RIGHT, LEFT};
+	std::vector<std::string> _actions;
 	std::vector<Eigen::MatrixXd> _transitions;
 	Eigen::MatrixXd _rewards;
-	float _gamma;
+	double _gamma;
 
 	public:
 	mdp(std::vector<std::pair<float, float>> states, std::vector<std::string> actions, 
-	    std::vector<Eigen::MatrixXd> transitions, Eigen::MatrixXd rewards, float gamma):
+	    std::vector<Eigen::MatrixXd> transitions, Eigen::MatrixXd rewards, double gamma):
 		_states(states), _actions(actions), _transitions(transitions), 
 		_rewards(rewards), _gamma(gamma) { /*Do Nothing*/ }
+
+	Eigen::MatrixXd value_iteration() {
+		double error = 1;
+		Eigen::MatrixXd Jcurr = Eigen::MatrixXd::Zero(_states.size(), 1);
+
+		Eigen::MatrixXd ca;
+		Eigen::MatrixXd Jprev;
+		Eigen::MatrixXd Pa;
+		Eigen::MatrixXd Qmax;
+		Eigen::MatrixXd Qa;
+
+		while(error > 1e-8) {
+			for(int i=0; i<_actions.size(); i++) {
+				ca = _rewards.col(i);
+				Pa = _transitions[i];
+				Qa = ca + _gamma * Pa * Jcurr;
+				if(i==0) { Qmax = Qa; }
+				else     { Qmax = Qmax.array().max(Qa.array()); }  
+			}
+
+			Jprev = Jcurr;
+			Jcurr = Qmax;
+			error = (Jcurr - Jprev).norm();	
+		}
+
+		std::cout << "Jcurr -> " << Jcurr.rows() << " x " << Jcurr.cols() << std::endl;
+		std::cout << "Jprev -> " << Jprev.rows() << " x " << Jprev.cols() << std::endl;
+		std::cout << "Qa    -> " << Qa.rows() << " x " << Qa.cols() << std::endl;
+		std::cout << "ca    -> " << ca.rows() << " x " << ca.cols() << std::endl;
+		std::cout << "Qmax  -> " << Qmax.rows() << " x " << Qmax.cols() << std::endl;
+		std::cout << "Pa    -> " << Pa.rows() << " x " << Pa.cols() << std::endl;
+		return compute_policy_from_J(Jcurr);
+	}
+
+	Eigen::MatrixXd compute_policy_from_J(Eigen::MatrixXd J) {
+		Eigen::MatrixXd pi(_states.size(), _actions.size());
+		Eigen::MatrixXd  Q(_states.size(), _actions.size());
+
+		for(int i=0; i<_actions.size(); i++)
+			Q.col(i) = _rewards.col(i) + _gamma * _transitions[i] * J;
+
+		pi.fill(0);
+		int coef = 0;
+		for(int i=0; i<_states.size(); i++) {
+			for(int j=0; j<_actions.size(); j++) {
+				if(std::fabs(Q(i, j)-J(i))<1e-5) {
+					pi(i, j) = 1;
+					coef++;
+				}
+			}
+			pi.row(i) /= coef;
+			coef = 0;
+		}
+		return pi;
+	} 
 
 };
 
@@ -569,11 +625,10 @@ class map_discretizer {
 	Eigen::MatrixXd build_up_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd up(squares, squares);
-		std::cout << squares << std::endl;
 		float sum = 0;
 		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
 			for(int x=0; x<discretized_grid_size_x(); x++) {
-				if(_square_colors[x][y] == BLACK) { continue; }
+				if(_square_colors[x][y] == BLACK) { continue; } 
 				
 				//can't go up
 				if(y == discretized_grid_size_y()-1 || _square_colors[x][y+1] == BLACK) {
@@ -581,7 +636,7 @@ class map_discretizer {
 				}
 				else {
 					up(get_index_of_state_square(x, y), 
-					   get_index_of_state_square(x, y+1)) = SUCC;
+					get_index_of_state_square(x, y+1)) = SUCC;
 				}
 
 				//can't go down
@@ -590,7 +645,7 @@ class map_discretizer {
 				}
 				else {
 					up(get_index_of_state_square(x, y), 
-					   get_index_of_state_square(x, y-1)) = FAIL;
+					get_index_of_state_square(x, y-1)) = FAIL;
 				}
 
 				//can't go right
@@ -599,7 +654,7 @@ class map_discretizer {
 				}
 				else {
 					up(get_index_of_state_square(x, y), 
-					   get_index_of_state_square(x+1, y)) = FAIL;
+					get_index_of_state_square(x+1, y)) = FAIL;
 				}
 
 				//can't go left
@@ -608,12 +663,12 @@ class map_discretizer {
 				}
 				else {
 					up(get_index_of_state_square(x, y), 
-					   get_index_of_state_square(x-1, y)) = FAIL;
+					get_index_of_state_square(x-1, y)) = FAIL;
 				}
+				up(get_index_of_state_square(x, y), get_index_of_state_square(x, y)) = sum;
+				sum = 0;
+				
 			}
-			if(_square_colors[y][y] != BLACK)
-				up(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
-			sum = 0;
 		}
 		return up;
 	}
@@ -664,10 +719,9 @@ class map_discretizer {
 					down(get_index_of_state_square(x, y), 
 					     get_index_of_state_square(x-1, y)) = FAIL;
 				}
+				down(get_index_of_state_square(x, y), get_index_of_state_square(x, y)) = sum;
+				sum = 0;
 			}
-			if(_square_colors[y][y] != BLACK)
-				down(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
-			sum = 0;
 		}
 		return down;	
 	}
@@ -718,10 +772,9 @@ class map_discretizer {
 					right(get_index_of_state_square(x, y), 
 					      get_index_of_state_square(x-1, y)) = FAIL;
 				}
+				right(get_index_of_state_square(x, y), get_index_of_state_square(x, y)) = sum;
+				sum = 0;
 			}
-			if(_square_colors[y][y] != BLACK)
-				right(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
-			sum = 0;
 		}
 		return right;
 	}
@@ -772,10 +825,9 @@ class map_discretizer {
 					left(get_index_of_state_square(x, y), 
 					     get_index_of_state_square(x-1, y)) = SUCC;
 				}
+				left(get_index_of_state_square(x, y), get_index_of_state_square(x, y)) = sum;
+				sum = 0;
 			}
-			if(_square_colors[y][y] != BLACK)
-				left(get_index_of_state_square(y, y), get_index_of_state_square(y, y)) = sum;
-			sum = 0;
 		}
 		return left;
 	}
@@ -789,15 +841,10 @@ class map_discretizer {
 	Eigen::MatrixXd build_rewards_for_mdp(std::pair<float, float> goal, std::vector<std::pair<float, float>> to_avoid) {
 		int squares = num_free_squares();
 		Eigen::MatrixXd rewards(squares, 4);
-		for(int i=0; i<rewards.cols(); i++) {
-			for(int j=0; j<rewards.rows(); j++) {
-				rewards(j, i) = -1;
-			}
-		}
+		rewards.fill(-1);
 
 		for(auto point : to_avoid) {
 			int index =  get_index_of_state_by_coord(point.first, point.second);
-			std::cout << index << std::endl; 
 			rewards(index, 0) = -100;
 			rewards(index, 1) = -100;
 			rewards(index, 2) = -100;
@@ -805,7 +852,6 @@ class map_discretizer {
 		}
 		
 		int goal_index = get_index_of_state_by_coord(goal.first, goal.second);
-		std::cout << goal_index << std::endl; 
 		rewards(goal_index, 0) = 100;
 		rewards(goal_index, 1) = 100;
 		rewards(goal_index, 2) = 100;
@@ -854,18 +900,37 @@ int main(int argc, char* argv[]) {
 	std::vector<Eigen::MatrixXd> transitions = m_d.build_transitions_for_mdp();
 	Eigen::MatrixXd rewards = m_d.build_rewards_for_mdp(goal, to_avoid);
 	std::vector<std::string> actions = {UP, DOWN, RIGHT, LEFT};
-	float gamma = 0.9;
+	double gamma = 0.9;
+
+	/*PROOF THAT THE VALUE ITERATION WORKS*/
+	// std::vector<std::pair<float, float>> states = {std::pair<float, float>(1, 1),
+	//                                                std::pair<float, float>(1, 1),
+	// 											   std::pair<float, float>(1, 1) };
+	// Eigen::MatrixXd m1(3, 3);
+	// m1 << 0, 1, 0, 0, 1, 0, 0, 0, 1;
+	// Eigen::MatrixXd m2(3, 3);
+	// m2 << 0, 0, 1, 0, 1, 0, 0, 0, 1;
+	// std::vector<Eigen::MatrixXd> transitions = {m1, m2};
+	// Eigen::MatrixXd rewards(3, 2);
+	// rewards << 1, 0.5, 0, 0, 1, 1;
+	// std::vector<std::string> actions = {"a", "b"};
+	// double gamma = 0.9;
 
 	mdp problem(states, actions, transitions, rewards, gamma);
+	Eigen::MatrixXd policy = problem.value_iteration();
 
-	std::cout << rewards << std::endl;
+	std::cout << policy << std::endl;
+	/*END OF PROOF THAT THE VALUE ITERATION WORKS*/
 
-	for(auto m : transitions) {
-		//std::cout << m << std::endl;
-		std::cout << m.rows() << " " << m.cols() << std::endl;
-	}
+
+	// std::cout << rewards << std::endl;
+
+	// for(auto m : transitions) {
+	// 	std::cout << m << std::endl;
+	// 	std::cout << m.rows() << " " << m.cols() << std::endl;
+	// }
 	
-	std::cout << states.size() << std::endl;
+	// std::cout << states.size() << std::endl;
 
 	// int i = 0;
 	// for(auto p : states) {
