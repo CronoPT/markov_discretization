@@ -36,6 +36,9 @@
 #define RIGHT "RIGHT"
 #define LEFT  "LEFT"
 
+/*===================================================================
+| mdp -> a class to represent mdps
+===================================================================*/
 class mdp {
 	std::vector<std::pair<float, float>> _states;
 	std::vector<std::string> _actions = {UP, DOWN, RIGHT, LEFT};
@@ -51,17 +54,49 @@ class mdp {
 
 };
 
+/*===================================================================
+| map_discretizer -> the intent of this class is to encapsulate
+| functions that allow one to take an OccupancyGrid from a ROS
+| map_server and do everything in orther to discretize the map and
+| turn it into an mdp
+===================================================================*/
 class map_discretizer {
+	/* The grid map we got from the map_server */
 	nav_msgs::OccupancyGrid _map;
+
+	/* Lowest x with a pixel that is free */
 	int _init_x;
+
+	/* Lowest y with a pixel that is free */
 	int _init_y;
+
+	/* Highest x with a pixel that is free */
 	int _final_x;
+
+	/* Highest y with a pixel that is free */
 	int _final_y;
+
+	/* Side of each resulting cell in meters*/
 	double _cell_size;
+
+	/* 
+	| Only used to print out the maps - how big do you want 
+	| you resulting map images? Has to be larger than 1
+	 */
 	int _scale;
+
+	/* 
+	| Saves the color of each cell after discretization
+	| The color also works as a code to see occupancy
+	*/
 	char** _square_colors;
+
+	/* The color of the pixels in the resulting maps */
 	char** _pixel_colors;
 
+	/*===============================================================
+	| compute the lowest x with a pixel that is free
+	===============================================================*/
 	void compute_init_x() {
 		for(int x=0; x<_map.info.width; x++)
 			for(int y=0; y<_map.info.height; y++)
@@ -71,6 +106,9 @@ class map_discretizer {
 				}
 	}
 
+	/*===============================================================
+	| compute the lowest y with a pixel that is free
+	===============================================================*/
 	void compute_init_y() {
 		for(int y=0; y<_map.info.height; y++) 
 			for(int x=0; x<_map.info.width; x++) 
@@ -80,6 +118,9 @@ class map_discretizer {
 				}
 	}
 
+	/*===============================================================
+	| compute the highest x with a pixel that is free
+	===============================================================*/
 	void compute_final_x() {
 		for(int x=_map.info.width-1; x>=0; x--)
 			for(int y=0; y<_map.info.height; y++)
@@ -89,6 +130,9 @@ class map_discretizer {
 				}
 	}
 
+	/*===============================================================
+	| compute the highest y with a pixel that is free
+	===============================================================*/
 	void compute_final_y() {
 		for(int y=_map.info.height-1; y>=0; y--)
 			for(int x=0; x<_map.info.width; x++)
@@ -98,6 +142,10 @@ class map_discretizer {
 				}
 	}
 
+	/*===============================================================
+	| check if a point (x, y) is within the bounds where we know 
+	| for sure there is only free and occupied space - not unknown
+	===============================================================*/
 	bool point_within_bounds(int x, int y) {
 		return (x>=_init_x && x<=_final_x && y>=_init_y && y<=_final_y);
 	}
@@ -136,22 +184,40 @@ class map_discretizer {
 		ROS_INFO("Pixel (%d, %d) corresponds to position (%.3f, %.3f) in the map", x, y, world_x, world_y);
 	}
 
+	/*===============================================================
+	| The real word x coordinate of a pixel with coordinate x in 
+	| the grid map
+	===============================================================*/
 	double pixel_x_to_coordinate(int x) {
 		return x*_map.info.resolution + _map.info.origin.position.x;
 	}
 
+	/*===============================================================
+	| The real word y coordinate of a pixel with coordinate y in 
+	| the grid map
+	===============================================================*/
 	double pixel_y_to_coordinate(int y) {
 		return y*_map.info.resolution + _map.info.origin.position.y;
 	}
 
+	/*===============================================================
+	| The resulting width of the map in cells after discretization
+	===============================================================*/
 	int discretized_grid_size_x() {
 		return (_final_x - _init_x)*_map.info.resolution/_cell_size + 1;
 	}
 
+	/*===============================================================
+	| The resulting height of the map in cells after discretization
+	===============================================================*/
 	int discretized_grid_size_y() {
 		return (_final_y - _init_y)*_map.info.resolution/_cell_size + 1;
 	}
 
+	/*===============================================================
+	| The resulting number of totally free cells in the resulting
+	| discretization
+	===============================================================*/
 	int num_free_squares() {
 		int res = 0;
 		determine_square_colors();
@@ -162,6 +228,11 @@ class map_discretizer {
 		return res;
 	}
 
+	/*===============================================================
+	| Print to screen the central coordinate of each cell if it is 
+	| fully free or OCCUPIED if the cell will not be considered .i.e
+	| it's not totally free
+	===============================================================*/
 	void compute_network() {
 		determine_square_colors();
 
@@ -196,6 +267,9 @@ class map_discretizer {
 
 	}
 
+	/*===============================================================
+	| Paint a picture with the received map, scaled with _scale
+	===============================================================*/
 	void paint_map(const std::string& path) {
 		std::ofstream img(path);
 		img << "P3" << std::endl;
@@ -226,6 +300,11 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| Paint a picture with the discretized map, scaled with _scale,
+	| at this point, it will not leave slightly occupied squares
+	| out of the picture
+	===============================================================*/
 	void paint_chess_map(const std::string& path) {
 		std::ofstream img(path);
 		img << "P3" << std::endl;
@@ -269,12 +348,19 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| Compute color of each square - essecially discretized
+	===============================================================*/
 	void determine_square_colors() {
 		for(int y=discretized_grid_size_y()-1; y>=0; y--)
 			for(int x=0; x<discretized_grid_size_x(); x++)
 				_square_colors[x][y] = determine_color_of_square(x, y);
 	}
 
+	/*===============================================================
+	| Compute color of each resulting pixel, has to be called
+	| after computing the square colors (determine_square_colors)
+	===============================================================*/
 	void determine_pixel_colors() {
 		for(int x=0; x<_map.info.width; x++) {
 			for(int y=0; y<_map.info.height; y++) {
@@ -308,6 +394,10 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| Compute to which discreteized cell the pixel (x, y) corresponds
+	| to - returns the coordinates in the discretized grid
+	===============================================================*/
 	std::pair<int, int> determine_square_of_pixel(int x, int y) {
 		int x_delocation = x-_init_x;
 		int y_delocation = y-_init_y;
@@ -317,7 +407,9 @@ class map_discretizer {
 		return res;
 	}
 
-	//FIXME
+	/*===============================================================
+	| Compute color of square (x,y) in the resulting discretized grid
+	===============================================================*/
 	int determine_color_of_square(int x, int y) {
 		int pixels_per_square = _cell_size/_map.info.resolution + 1;
 		int init_square_x = _init_x + (x*pixels_per_square);
@@ -335,8 +427,13 @@ class map_discretizer {
 		return FREE;
 	}
 
+	/*===============================================================
+	| Paint a picture with the discretized map, scaled with _scale,
+	| at this point cells that are slightly occupied in the real 
+	| world will be painted all black - the colored squares will
+	| be the only cells considered to build the mdp
+	===============================================================*/
 	void paint_chess_filtered_map(const std::string& path) {
-
 		determine_square_colors();
 		determine_pixel_colors();
 
@@ -366,6 +463,10 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| Cumpute states for the MDP - each state is just a point in the
+	| real world - (x, y)
+	===============================================================*/
 	std::vector<std::pair<float, float>> build_states_for_mdp() {
 		std::vector<std::pair<float, float>> states;
 		determine_square_colors();
@@ -395,6 +496,12 @@ class map_discretizer {
 		return states;
 	}
 
+	/*===============================================================
+	| Compute transition probabilities for the MDP
+	| The robot will move up, down, right and left - each action
+	| as probability SUCC of succeeding, when it fails it will
+	| mode to one of the adjacent states or stay in the present cell
+	===============================================================*/
 	std::vector<Eigen::MatrixXd> build_transitions_for_mdp() {
 		std::vector<Eigen::MatrixXd> transitions;
 		transitions.push_back(build_up_transition());
@@ -404,6 +511,10 @@ class map_discretizer {
 		return transitions;	
 	}
 
+	/*===============================================================
+	| Compute the state number that the square (x, y) in the 
+	| discretized grid corresponds to
+	===============================================================*/
 	int get_index_of_state_square(int x, int y) {
 		int res = 0;
 		for(int yi=discretized_grid_size_y()-1; yi>=0; yi--) {
@@ -414,6 +525,11 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| Compute the state number that the center point (x, y)
+	| represents - remember that each cell is characterized by
+	| its real world center coordinate
+	===============================================================*/
 	int get_index_of_state_by_coord(float xi, float yi) {
 		determine_square_colors();
 
@@ -447,6 +563,9 @@ class map_discretizer {
 		return index;
 	}
 
+	/*===============================================================
+	| Compute transitions probabilities for the UP action
+	===============================================================*/
 	Eigen::MatrixXd build_up_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd up(squares, squares);
@@ -499,6 +618,9 @@ class map_discretizer {
 		return up;
 	}
 
+	/*===============================================================
+	| Compute transitions probabilities for the DOWN action
+	===============================================================*/
 	Eigen::MatrixXd build_down_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd down(squares, squares);
@@ -550,6 +672,9 @@ class map_discretizer {
 		return down;	
 	}
 
+	/*===============================================================
+	| Compute transitions probabilities for the RIGHT action
+	===============================================================*/
 	Eigen::MatrixXd build_right_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd right(squares, squares);
@@ -601,6 +726,9 @@ class map_discretizer {
 		return right;
 	}
 
+	/*===============================================================
+	| Compute transitions probabilities for the LEFT action
+	===============================================================*/
 	Eigen::MatrixXd build_left_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd left(squares, squares);
@@ -652,6 +780,12 @@ class map_discretizer {
 		return left;
 	}
 
+	/*===============================================================
+	| Compute reward function for the MDP - receives the goal (which
+	| will have higher reward) and the cells to avoid (which will 
+	| have very low rewards), all the oders have the same rewards
+	| This function awards the same for every action in each state
+	===============================================================*/
 	Eigen::MatrixXd build_rewards_for_mdp(std::pair<float, float> goal, std::vector<std::pair<float, float>> to_avoid) {
 		int squares = num_free_squares();
 		Eigen::MatrixXd rewards(squares, 4);
