@@ -38,21 +38,16 @@
 
 class mdp {
 	std::vector<std::pair<float, float>> _states;
-	int _height;
-	int _width;
 	std::vector<std::string> _actions = {UP, DOWN, RIGHT, LEFT};
 	std::vector<Eigen::MatrixXd> _transitions;
 	Eigen::MatrixXd _rewards;
 	float _gamma;
-	float _succ;
-	float _fail;
 
 	public:
-	mdp(std::vector<std::pair<float, float>> states, int height, int width, Eigen::MatrixXd rewards, float gamma):
-		_states(states), _height(height), _width(width), _rewards(rewards), _gamma(gamma) {
-		_succ = SUCC;
-		_fail = FAIL;
-	}
+	mdp(std::vector<std::pair<float, float>> states, std::vector<std::string> actions, 
+	    std::vector<Eigen::MatrixXd> transitions, Eigen::MatrixXd rewards, float gamma):
+		_states(states), _actions(actions), _transitions(transitions), 
+		_rewards(rewards), _gamma(gamma) { /*Do Nothing*/ }
 
 };
 
@@ -419,6 +414,39 @@ class map_discretizer {
 		}
 	}
 
+	int get_index_of_state_by_coord(float xi, float yi) {
+		determine_square_colors();
+
+		double init_square_x = 0;
+		double init_square_y = 0;
+		double final_square_x = 0;
+		double final_square_y = 0;
+		double coord_x = 0;
+		double coord_y = 0;
+		int pixels_per_square = _cell_size/_map.info.resolution + 1;
+		int index = 0;
+
+		for(int y=discretized_grid_size_y()-1; y>=0; y--) {
+			for(int x=0; x<discretized_grid_size_x(); x++) {
+				init_square_x = pixel_x_to_coordinate( _init_x + (x*pixels_per_square));
+				init_square_y = pixel_y_to_coordinate( _init_y + (y*pixels_per_square));
+				final_square_x = pixel_x_to_coordinate( _init_x + (x+1)*pixels_per_square);
+				final_square_y = pixel_y_to_coordinate( _init_y + (y+1)*pixels_per_square);
+				coord_x = (init_square_x+final_square_x)/2;
+				coord_y = (init_square_y+final_square_y)/2;
+
+				//exact comparison won't work
+				if(std::fabs(coord_x-xi)<0.001 && std::fabs(coord_y-yi)<0.001){
+					return index;
+				}
+
+				if(_square_colors[x][y] != BLACK) { index++; }
+			}
+		}
+
+		return index;
+	}
+
 	Eigen::MatrixXd build_up_transition() {
 		int squares = num_free_squares();
 		Eigen::MatrixXd up(squares, squares);
@@ -624,6 +652,34 @@ class map_discretizer {
 		return left;
 	}
 
+	Eigen::MatrixXd build_rewards_for_mdp(std::pair<float, float> goal, std::vector<std::pair<float, float>> to_avoid) {
+		int squares = num_free_squares();
+		Eigen::MatrixXd rewards(squares, 4);
+		for(int i=0; i<rewards.cols(); i++) {
+			for(int j=0; j<rewards.rows(); j++) {
+				rewards(j, i) = -1;
+			}
+		}
+
+		for(auto point : to_avoid) {
+			int index =  get_index_of_state_by_coord(point.first, point.second);
+			std::cout << index << std::endl; 
+			rewards(index, 0) = -100;
+			rewards(index, 1) = -100;
+			rewards(index, 2) = -100;
+			rewards(index, 3) = -100;
+		}
+		
+		int goal_index = get_index_of_state_by_coord(goal.first, goal.second);
+		std::cout << goal_index << std::endl; 
+		rewards(goal_index, 0) = 100;
+		rewards(goal_index, 1) = 100;
+		rewards(goal_index, 2) = 100;
+		rewards(goal_index, 3) = 100;
+
+		return rewards;
+	}
+
 };
 
 int main(int argc, char* argv[]) {
@@ -650,10 +706,27 @@ int main(int argc, char* argv[]) {
 	m_d.compute_network();
 	//ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
 	
-	std::vector<Eigen::MatrixXd> matrixes = m_d.build_transitions_for_mdp();
-	std::vector<std::pair<float, float>> states = m_d.build_states_for_mdp();
+	std::pair<float, float> goal(3.75, 3.90);
+	std::vector<std::pair<float, float>> to_avoid;
+	to_avoid.push_back(std::pair<float, float>(1.65, 0.90));
+	to_avoid.push_back(std::pair<float, float>(1.65, 1.20));
+	to_avoid.push_back(std::pair<float, float>(1.65, 1.50));
+	to_avoid.push_back(std::pair<float, float>(1.65, 1.80));
+	to_avoid.push_back(std::pair<float, float>(1.65, 2.10));
+	to_avoid.push_back(std::pair<float, float>(1.65, 2.40));
+	to_avoid.push_back(std::pair<float, float>(1.65, 2.70));
 
-	for(auto m : matrixes) {
+	std::vector<std::pair<float, float>> states = m_d.build_states_for_mdp();
+	std::vector<Eigen::MatrixXd> transitions = m_d.build_transitions_for_mdp();
+	Eigen::MatrixXd rewards = m_d.build_rewards_for_mdp(goal, to_avoid);
+	std::vector<std::string> actions = {UP, DOWN, RIGHT, LEFT};
+	float gamma = 0.9;
+
+	mdp problem(states, actions, transitions, rewards, gamma);
+
+	std::cout << rewards << std::endl;
+
+	for(auto m : transitions) {
 		//std::cout << m << std::endl;
 		std::cout << m.rows() << " " << m.cols() << std::endl;
 	}
