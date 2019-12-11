@@ -12,6 +12,9 @@
 #include "ros/ros.h"
 #include "ros/console.h"
 
+#include "move_base_msgs/MoveBaseAction.h"
+#include "actionlib/client/simple_action_client.h"
+
 #include "nav_msgs/GetMap.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "nav_msgs/MapMetaData.h"
@@ -19,6 +22,7 @@
 #include "geometry_msgs/Pose.h"
 #include "geometry_msgs/Point.h"
 #include "geometry_msgs/Quaternion.h"
+#include "geometry_msgs/PoseWithCovarianceStamped.h"
 
 #include "nav_msgs/GetMap.h"
 
@@ -36,6 +40,15 @@
 #define DOWN  "DOWN"
 #define RIGHT "RIGHT"
 #define LEFT  "LEFT"
+
+double __x = 0;
+double __y = 0;
+
+void chatterCallback(const geometry_msgs::PoseWithCovarianceStamped& msg) {
+	__x = msg.pose.pose.position.x;
+	__y = msg.pose.pose.position.y;
+}
+
 
 /*===================================================================
 | mdp -> a class to represent mdps
@@ -107,6 +120,89 @@ class mdp {
 		}
 		return pi;
 	} 
+
+	void follow_policy(Eigen::MatrixXd policy, int steps) {
+		int curr_state = determine_state_of_robot();
+		int next_state = 0;
+
+		move_base_msgs::MoveBaseGoal goal;
+		for(int step=0; step<steps; step++) {
+			actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> ac("move_base", true);
+
+			while(!ac.waitForServer(ros::Duration(5.0))){
+				ROS_INFO("Waiting for the move_base action server to come up");
+			}
+			
+			next_state = determine_new_state(curr_state, policy);
+
+			goal.target_pose.header.frame_id = "map";
+			goal.target_pose.header.stamp = ros::Time::now();
+
+			goal.target_pose.pose.position.x = _states[next_state].first;
+			goal.target_pose.pose.position.y = _states[next_state].second;
+			goal.target_pose.pose.orientation.w = 0.2;
+			goal.target_pose.pose.orientation.z = 0.0;
+
+			ROS_INFO("Sending goal (%.2f, %.2f)", _states[next_state].first, _states[next_state].second);
+			ac.sendGoal(goal);
+			ac.waitForResult();
+
+			if(ac.getState() == actionlib::SimpleClientGoalState::SUCCEEDED)
+				ROS_INFO("Hooray, the robot move to state %d in (%.2f, %.2f)", next_state,
+				         _states[next_state].first,
+				         _states[next_state].second);
+			else
+				ROS_INFO("The robot failed to reach state %d in (%.2f, %.2f)", next_state,
+				         _states[next_state].first,
+				         _states[next_state].second);
+
+			curr_state = next_state;
+		}
+	}
+
+	int determine_state_of_robot() {
+		Eigen::MatrixXd vector_pose(2, 1);
+		vector_pose << __x, __y;
+
+		std::cout << "Robot in " << __x << " " << __y << std::endl;
+
+		int state = 0;
+		std::pair<float, float> pos(-1, -1);
+		double min_norm = INFINITY;
+		for(int i=0; i<_states.size(); i++) {
+			Eigen::MatrixXd vector_state(2, 1);
+			vector_state << _states[i].first, _states[i].second;
+
+			if( (vector_pose - vector_state).norm() < min_norm ) {
+				min_norm = (vector_pose-vector_state).norm();
+				state = i;
+				pos = _states[i];
+			} 
+		}
+
+		std::cout << "Curr state -> " << state;
+		std::cout << " -- " << pos.first << " x " << pos.second << std::endl;
+
+
+		return state;
+	}
+
+	int determine_new_state(int curr_state, Eigen::MatrixXd policy) {
+		int action    = random_choice(policy.row(curr_state));
+		int new_state = random_choice(_transitions[action].row(curr_state));
+
+		return new_state;
+	}
+
+	int random_choice(Eigen::MatrixXd distribution) {
+		double prob = ((double)(std::rand()+1 % 101)) / 100;
+		double sum  = 0;
+
+		for(int i=0; i<distribution.cols(); i++) {
+			sum += distribution(i);
+			if(sum >= prob) { return i; }
+		}
+	}
 
 };
 
@@ -864,8 +960,12 @@ class map_discretizer {
 
 int main(int argc, char* argv[]) {
 	ros::init(argc, argv, "map_discretizer");
+	ros::init(argc, argv, "markov_goals");
+	ros::init(argc, argv, "pose_getter");
 
 	ros::NodeHandle n;
+
+	ros::Subscriber sub = n.subscribe("amcl_pose", 100, chatterCallback);
 
 	nav_msgs::GetMap::Request  req;
 	nav_msgs::GetMap::Response resp;
@@ -920,6 +1020,9 @@ int main(int argc, char* argv[]) {
 	Eigen::MatrixXd policy = problem.value_iteration();
 
 	std::cout << policy << std::endl;
+
+	problem.follow_policy(policy, 1000);
+
 	/*END OF PROOF THAT THE VALUE ITERATION WORKS*/
 
 
