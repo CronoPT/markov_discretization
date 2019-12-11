@@ -143,7 +143,10 @@ class mdp {
 			goal.target_pose.pose.orientation.w = 0.2;
 			goal.target_pose.pose.orientation.z = 0.0;
 
-			ROS_INFO("Sending goal (%.2f, %.2f)", _states[next_state].first, _states[next_state].second);
+			ROS_INFO("Sending goal to reach state %d in (%.2f, %.2f)", next_state,
+			         _states[next_state].first,
+					 _states[next_state].second);
+					
 			ac.sendGoal(goal);
 			ac.waitForResult();
 
@@ -195,7 +198,7 @@ class mdp {
 	}
 
 	int random_choice(Eigen::MatrixXd distribution) {
-		double prob = ((double)(std::rand()+1 % 101)) / 100;
+		double prob = ((double)((std::rand() % 100)+1)) / 100;
 		double sum  = 0;
 
 		for(int i=0; i<distribution.cols(); i++) {
