@@ -26,8 +26,8 @@
 
 #include "nav_msgs/GetMap.h"
 
-#define SUCC 0.79
-#define FAIL 0.07
+#define SUCC 0.90
+#define FAIL 0.10/3
 
 #define RED1  0
 #define RED2  11
@@ -129,6 +129,7 @@ class mdp {
 	} 
 
 	void follow_policy(Eigen::MatrixXd policy, int steps, bool finish_when_in_goal=false) {
+		ros::spinOnce();
 		int curr_state = determine_state_of_robot();
 		int next_state = 0;
 
@@ -717,10 +718,10 @@ class map_discretizer {
 					img << 235 << " " << 158 << " " << 52 << std::endl;
 				}
 				else if(_pixel_colors[x][y] == RED1) {
-					img << 235 << " " << 52 << " " << 52 << std::endl;
+					img << 255 << " " << 110 << " " << 110 << std::endl;
 				}
 				else if(_pixel_colors[x][y] == RED2) {
-					img << 255 << " " << 110 << " " << 110 << std::endl;
+					img << 235 << " " << 52 << " " << 52 << std::endl;
 				}
 				else if(_pixel_colors[x][y] == BLUE1) {
 					img << 52 << " " << 143 << " " << 235 << std::endl;
@@ -1078,6 +1079,16 @@ class map_discretizer {
 
 };
 
+void mdp_switcher(mdp mdp_1, mdp mdp_2, int runs) {
+	Eigen::MatrixXd policy_1 = mdp_1.value_iteration();
+	Eigen::MatrixXd policy_2 = mdp_2.value_iteration();
+
+	for(int i=0; i<runs; i++) {
+		mdp_1.follow_policy(policy_1, 1000, true);
+		mdp_2.follow_policy(policy_2, 1000, true);
+	}
+}
+
 int main(int argc, char* argv[]) {
 	ros::init(argc, argv, "map_discretizer");
 	ros::init(argc, argv, "markov_goals");
@@ -1085,7 +1096,7 @@ int main(int argc, char* argv[]) {
 
 	ros::NodeHandle n;
 
-	ros::Subscriber sub = n.subscribe("amcl_pose", 100, chatterCallback);
+	ros::Subscriber sub = n.subscribe("amcl_pose", 10, chatterCallback);
 
 	nav_msgs::GetMap::Request  req;
 	nav_msgs::GetMap::Response resp;
@@ -1107,23 +1118,53 @@ int main(int argc, char* argv[]) {
 	m_d.compute_network();
 	//ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
 	
-	std::pair<float, float> goal(3.75, 3.90);
-	std::vector<std::pair<float, float>> to_avoid;
-	to_avoid.push_back(std::pair<float, float>(1.65, 0.90));
-	to_avoid.push_back(std::pair<float, float>(1.65, 1.20));
-	to_avoid.push_back(std::pair<float, float>(1.65, 1.50));
-	to_avoid.push_back(std::pair<float, float>(1.65, 1.80));
-	to_avoid.push_back(std::pair<float, float>(1.65, 2.10));
-	to_avoid.push_back(std::pair<float, float>(1.65, 2.40));
-	to_avoid.push_back(std::pair<float, float>(1.65, 2.70));
-
 	std::vector<std::pair<float, float>> states = m_d.build_states_for_mdp();
 	std::vector<Eigen::MatrixXd> transitions = m_d.build_transitions_for_mdp();
-	Eigen::MatrixXd rewards = m_d.build_rewards_for_mdp(goal, to_avoid);
 	std::vector<std::string> actions = {UP, DOWN, RIGHT, LEFT};
 	double gamma = 0.9;
 
-	m_d.paint_chess_filtered_reward_map("rewards_map.ppm", rewards);
+	std::pair<float, float> goal_1(2.25, 3.60);
+	std::vector<std::pair<float, float>> to_avoid_1;
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 0.90));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 1.20));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 1.50));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 1.80));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 2.10));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 2.40));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 2.70));
+	to_avoid_1.push_back(std::pair<float, float>(-0.15, 3.60));
+	to_avoid_1.push_back(std::pair<float, float>(1.35, 3.30));
+	to_avoid_1.push_back(std::pair<float, float>(1.35, 3.60));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 2.10));
+	to_avoid_1.push_back(std::pair<float, float>(1.65, 1.80));
+
+	Eigen::MatrixXd rewards_1 = m_d.build_rewards_for_mdp(goal_1, to_avoid_1);
+	//m_d.paint_chess_filtered_reward_map("rewards_map_1.ppm", rewards_1);
+
+	std::pair<float, float> goal_2(0.75, 0.90);
+	std::vector<std::pair<float, float>> to_avoid_2;
+	to_avoid_2.push_back(std::pair<float, float>(0.15, 3.90));
+	to_avoid_2.push_back(std::pair<float, float>(0.45, 3.90));
+	to_avoid_2.push_back(std::pair<float, float>(0.75, 3.90));
+	to_avoid_2.push_back(std::pair<float, float>(1.05, 3.90));
+	to_avoid_2.push_back(std::pair<float, float>(-0.15, 3.30));
+	to_avoid_2.push_back(std::pair<float, float>(-0.15, 3.60));
+	to_avoid_2.push_back(std::pair<float, float>(1.35, 3.30));
+	to_avoid_2.push_back(std::pair<float, float>(1.35, 3.60));
+	to_avoid_2.push_back(std::pair<float, float>(1.65, 2.10));
+	to_avoid_2.push_back(std::pair<float, float>(1.65, 1.80));
+
+	Eigen::MatrixXd rewards_2 = m_d.build_rewards_for_mdp(goal_2, to_avoid_2);
+	//m_d.paint_chess_filtered_reward_map("rewards_map_2.ppm", rewards_2);
+
+	mdp mdp_1(states, actions, transitions, rewards_1, gamma);
+	mdp mdp_2(states, actions, transitions, rewards_2, gamma);
+
+	//Eigen::MatrixXd policy = mdp_2.value_iteration();
+
+	//std::cout << policy << std::endl;
+
+	mdp_switcher(mdp_1, mdp_2, 2);
 
 	/*PROOF THAT THE VALUE ITERATION WORKS*/
 	// std::vector<std::pair<float, float>> states = {std::pair<float, float>(1, 1),
@@ -1139,10 +1180,9 @@ int main(int argc, char* argv[]) {
 	// std::vector<std::string> actions = {"a", "b"};
 	// double gamma = 0.9;
 
-	mdp problem(states, actions, transitions, rewards, gamma);
-	Eigen::MatrixXd policy = problem.value_iteration();
+	//Eigen::MatrixXd policy = problem.value_iteration();
 
-	std::cout << policy << std::endl;
+	//std::cout << policy << std::endl;
 
 	//problem.follow_policy(policy, 1000);
 

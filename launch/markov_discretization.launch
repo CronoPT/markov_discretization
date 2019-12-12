@@ -1,6 +1,6 @@
 <launch>
 
-<node pkg="tf2_ros" type="static_transform_publisher" name="map_broadcaster" args="0.15 0.15 0 0 0 0 1 map cell_map" />
+<node pkg="tf2_ros" type="static_transform_publisher" name="map_broadcaster" args="0 0.15 0 0 0 0 1 map cell_map" />
 
 <include file="$(find turtlebot3_gazebo)/launch/turtlebot3_world.launch">
 </include>
