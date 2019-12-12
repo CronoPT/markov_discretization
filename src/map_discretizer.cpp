@@ -29,7 +29,10 @@
 #define SUCC 0.79
 #define FAIL 0.07
 
-#define RED   0
+#define RED1  0
+#define RED2  11
+#define BLUE1 12
+#define BLUE2 13
 #define GREEN 1
 #define ORANG 2
 #define BLACK 3
@@ -40,6 +43,10 @@
 #define DOWN  "DOWN"
 #define RIGHT "RIGHT"
 #define LEFT  "LEFT"
+
+#define DEADLY -100
+#define NORMAL -1
+#define GOAL   100
 
 double __x = 0;
 double __y = 0;
@@ -121,7 +128,7 @@ class mdp {
 		return pi;
 	} 
 
-	void follow_policy(Eigen::MatrixXd policy, int steps) {
+	void follow_policy(Eigen::MatrixXd policy, int steps, bool finish_when_in_goal=false) {
 		int curr_state = determine_state_of_robot();
 		int next_state = 0;
 
@@ -160,6 +167,10 @@ class mdp {
 				         _states[next_state].second);
 
 			curr_state = next_state;
+
+			if(_rewards(curr_state, 0) == GOAL && finish_when_in_goal) {
+				return;
+			}
 		}
 	}
 
@@ -475,15 +486,15 @@ class map_discretizer {
 					if(_map.data[y*_map.info.height+x] == 0) {
 						if( (((int)(x-_init_x))%((int) (2*_cell_size/_map.info.resolution + 1))) > _cell_size/_map.info.resolution ) {
 							if( (((int)(y-_init_y))%((int) (2*_cell_size/_map.info.resolution + 1))) > _cell_size/_map.info.resolution )
-								img << 117 << " " << 255 << " " << 168 << std::endl;
+								img << 52 << " " << 143 << " " << 235 << std::endl;
 							else
-								img << 255 << " " << 117 << " " << 117 << std::endl;
+								img << 52 << " " << 85 << " " << 235 << std::endl;
 						}
 						else {
 							if( (((int)(y-_init_y))%((int) (2*_cell_size/_map.info.resolution + 1))) < _cell_size/_map.info.resolution )
-								img << 117 << " " << 255 << " " << 168 << std::endl;
+								img << 52 << " " << 143 << " " << 235 << std::endl;
 							else
-								img << 255 << " " << 117 << " " << 117 << std::endl;
+								img << 52 << " " << 85 << " " << 235 << std::endl;
 						}
 					}
 					else if(_map.data[y*_map.info.height+x] == -1) {
@@ -527,18 +538,75 @@ class map_discretizer {
 						_pixel_colors[x][y] = BLACK;
 					}
 					else if(x_square%2==0 && y_square%2==0) {
-						_pixel_colors[x][y] = RED;
+						_pixel_colors[x][y] = BLUE1;
 					}
 					else if(x_square%2==0 && y_square%2!=0) {
-						_pixel_colors[x][y] = GREEN;
+						_pixel_colors[x][y] = BLUE2;
 					}
 					else if(x_square%2!=0 && y_square%2!=0) {
-						_pixel_colors[x][y] = RED;
+						_pixel_colors[x][y] = BLUE1;
 					}
 					else if(x_square%2!=0 && y_square%2==0) {
-						_pixel_colors[x][y] = GREEN;
+						_pixel_colors[x][y] = BLUE2;
 					}
 				}
+				else if(_map.data[y*_map.info.height+x] == -1) {
+					_pixel_colors[x][y] = ORANG;
+				}
+				else if(_map.data[y*_map.info.height+x] == 100) {
+					_pixel_colors[x][y] = BLACK;
+				}
+			}
+		}
+	}
+
+	/*===============================================================
+	| Compute color of each resulting pixel, accounting for the 
+	| respective rewards in each specific square has to be called
+	| after computing the square colors (determine_square_colors)
+	===============================================================*/
+	void determine_pixel_rewards_colors(Eigen::MatrixXd rewards) {
+		for(int x=0; x<_map.info.width; x++) {
+			for(int y=0; y<_map.info.height; y++) {
+				if(point_within_bounds(x, y)) {
+					auto square = determine_square_of_pixel(x, y);
+					int x_square = square.first;
+					int y_square = square.second;
+					if(_square_colors[x_square][y_square]==BLACK) {
+						_pixel_colors[x][y] = BLACK;
+					}
+					else if(rewards(get_index_of_state_square(x_square, y_square), 0) == DEADLY) {
+						if(x_square%2==0 && y_square%2==0) {
+							_pixel_colors[x][y] = RED1;
+						}
+						else if(x_square%2==0 && y_square%2!=0) {
+							_pixel_colors[x][y] = RED2;
+						}
+						else if(x_square%2!=0 && y_square%2!=0) {
+							_pixel_colors[x][y] = RED1;
+						}
+						else if(x_square%2!=0 && y_square%2==0) {
+							_pixel_colors[x][y] = RED2;
+						}
+					}
+					else if(rewards(get_index_of_state_square(x_square, y_square), 0) == NORMAL) {
+						if(x_square%2==0 && y_square%2==0) {
+							_pixel_colors[x][y] = BLUE1;
+						}
+						else if(x_square%2==0 && y_square%2!=0) {
+							_pixel_colors[x][y] = BLUE2;
+						}
+						else if(x_square%2!=0 && y_square%2!=0) {
+							_pixel_colors[x][y] = BLUE1;
+						}
+						else if(x_square%2!=0 && y_square%2==0) {
+							_pixel_colors[x][y] = BLUE2;
+						}
+					}
+					else if(rewards(get_index_of_state_square(x_square, y_square), 0) == GOAL) {
+						_pixel_colors[x][y] = GREEN;
+					}
+				}					
 				else if(_map.data[y*_map.info.height+x] == -1) {
 					_pixel_colors[x][y] = ORANG;
 				}
@@ -608,11 +676,60 @@ class map_discretizer {
 				else if(_pixel_colors[x][y] == ORANG) {
 					img << 235 << " " << 158 << " " << 52 << std::endl;
 				}
-				else if(_pixel_colors[x][y] == RED) {
-					img << 117 << " " << 255 << " " << 168 << std::endl;
+				else if(_pixel_colors[x][y] == BLUE1) {
+					img << 52 << " " << 143 << " " << 235 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == BLUE2) {
+					img << 52 << " " << 85 << " " << 235 << std::endl;
+				}
+			}
+		}
+	}
+
+	/*===============================================================
+	| Paint a picture with the discretized map, scaled with _scale,
+	| at this point cells that are slightly occupied in the real 
+	| world will be painted all black - the colored squares will
+	| be the only cells considered to build the mdp and squares will
+	| be color coded to represent the reward of executing an action
+	| in that specific state
+	===============================================================*/
+	void paint_chess_filtered_reward_map(const std::string& path, Eigen::MatrixXd rewards) {
+		determine_square_colors();
+		determine_pixel_rewards_colors(rewards);
+
+		std::cout << "Where was it?" << std::endl;
+
+		std::ofstream img(path);
+		img << "P3" << std::endl;
+		img << _map.info.width*_scale << " " << _map.info.height*_scale << std::endl;
+		img << "255" << std::endl; 
+		ROS_INFO("Size of each cell in pixels -> %d", (int)(_cell_size/_map.info.resolution + 1));	
+
+		for(int y=_map.info.height-1; y>=0; y--) {
+			for(int sy=0; sy<_scale; sy++)
+			for(int x=0; x<_map.info.width; x++) 
+			for(int sx=0; sx<_scale; sx++) {
+				if(_pixel_colors[x][y] == BLACK) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == ORANG) {
+					img << 235 << " " << 158 << " " << 52 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == RED1) {
+					img << 235 << " " << 52 << " " << 52 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == RED2) {
+					img << 255 << " " << 110 << " " << 110 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == BLUE1) {
+					img << 52 << " " << 143 << " " << 235 << std::endl;
+				}
+				else if(_pixel_colors[x][y] == BLUE2) {
+					img << 52 << " " << 85 << " " << 235 << std::endl;
 				}
 				else if(_pixel_colors[x][y] == GREEN) {
-					img << 255 << " " << 117 << " " << 117 << std::endl;
+					img << 117 << " " << 255 << " " << 168 << std::endl;
 				}
 			}
 		}
@@ -940,21 +1057,21 @@ class map_discretizer {
 	Eigen::MatrixXd build_rewards_for_mdp(std::pair<float, float> goal, std::vector<std::pair<float, float>> to_avoid) {
 		int squares = num_free_squares();
 		Eigen::MatrixXd rewards(squares, 4);
-		rewards.fill(-1);
+		rewards.fill(NORMAL);
 
 		for(auto point : to_avoid) {
 			int index =  get_index_of_state_by_coord(point.first, point.second);
-			rewards(index, 0) = -100;
-			rewards(index, 1) = -100;
-			rewards(index, 2) = -100;
-			rewards(index, 3) = -100;
+			rewards(index, 0) = DEADLY;
+			rewards(index, 1) = DEADLY;
+			rewards(index, 2) = DEADLY;
+			rewards(index, 3) = DEADLY;
 		}
 		
 		int goal_index = get_index_of_state_by_coord(goal.first, goal.second);
-		rewards(goal_index, 0) = 100;
-		rewards(goal_index, 1) = 100;
-		rewards(goal_index, 2) = 100;
-		rewards(goal_index, 3) = 100;
+		rewards(goal_index, 0) = GOAL;
+		rewards(goal_index, 1) = GOAL;
+		rewards(goal_index, 2) = GOAL;
+		rewards(goal_index, 3) = GOAL;
 
 		return rewards;
 	}
@@ -982,10 +1099,11 @@ int main(int argc, char* argv[]) {
 	ROS_INFO("Received");
 	
 	map_discretizer m_d(resp.map, 0.3, 5);
-	//m_d.paint_chess_filtered_map("filtered_map.ppm");
-	//m_d.paint_chess_map("squared_map.ppm");
-	//m_d.paint_map("normal_map.ppm");
-	//m_d.print_position_of_pixel(100, 100);
+
+	// m_d.paint_chess_filtered_map("filtered_map.ppm");
+	// m_d.paint_chess_map("squared_map.ppm");
+	// m_d.paint_map("normal_map.ppm");
+	// m_d.print_position_of_pixel(100, 100);
 	m_d.compute_network();
 	//ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
 	
@@ -1004,6 +1122,8 @@ int main(int argc, char* argv[]) {
 	Eigen::MatrixXd rewards = m_d.build_rewards_for_mdp(goal, to_avoid);
 	std::vector<std::string> actions = {UP, DOWN, RIGHT, LEFT};
 	double gamma = 0.9;
+
+	m_d.paint_chess_filtered_reward_map("rewards_map.ppm", rewards);
 
 	/*PROOF THAT THE VALUE ITERATION WORKS*/
 	// std::vector<std::pair<float, float>> states = {std::pair<float, float>(1, 1),
@@ -1024,7 +1144,7 @@ int main(int argc, char* argv[]) {
 
 	std::cout << policy << std::endl;
 
-	problem.follow_policy(policy, 1000);
+	//problem.follow_policy(policy, 1000);
 
 	/*END OF PROOF THAT THE VALUE ITERATION WORKS*/
 
