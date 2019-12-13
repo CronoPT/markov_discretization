@@ -246,6 +246,12 @@ class mdp {
 		}
 	}
 
+	/*===============================================================
+	| Run Q-learning with e-greedy (see function e-greedy). The
+	| Q function will be initialized with qinit, it will run for
+	| 'steps' steps and 'already_run' is the number of iterations
+	| it tooke to reach qinit (needed for e-greedy)
+	===============================================================*/
 	Eigen::MatrixXd Q_learning(Eigen::MatrixXd qinit, int steps, int already_run=0) {
 		Eigen::MatrixXd q = qinit;
 
@@ -263,6 +269,12 @@ class mdp {
 		return q;
 	}
 
+	/*===============================================================
+	| Run SARSA with e-greedy (see function e-greedy). The
+	| Q function will be initialized with qinit, it will run for
+	| 'steps' steps and 'already_run' is the number of iterations
+	| it tooke to reach qinit (needed for e-greedy)
+	===============================================================*/
 	Eigen::MatrixXd SARSA(Eigen::MatrixXd qinit, int steps, int already_run=0) {
 		Eigen::MatrixXd q = qinit;
 
@@ -282,8 +294,12 @@ class mdp {
 		return q;
 	}
 
+	/*===============================================================
+	| e-greedy function - chooses whether to explore or exploit
+	| in a given reinforcement learning algorithm step
+	===============================================================*/
 	int e_greedy(Eigen::MatrixXd q, int t) {
-		double eps = 0.8;
+		double eps = std::exp(-(t/1000000));//0.8;
 		Eigen::MatrixXd dist(1, 2);
 		dist << eps, 1-eps;
 		int ind = random_choice(dist);
@@ -300,6 +316,11 @@ class mdp {
 		else         return choose_from_best(q);      //exploitation
 	}
 
+	/*===============================================================
+	| Choose on action randomly for the best ones (the choice is
+	| only random if there's more than one aquiton with the same
+	| Q value)
+	===============================================================*/
 	int choose_from_best(Eigen::MatrixXd q) {
 		double max = q.maxCoeff();
 		std::vector<int> possible;
@@ -317,6 +338,12 @@ class mdp {
 		return possible[chosen];
 	}
 
+	/*===============================================================
+	| Run Q-learning and SARSA for this particular MDP. Execute
+	| 'max_steps' for each. Stride indicates the granularity of
+	| the recorded data (this function also writes to a csv file
+	| so that error can then be ploted)
+	===============================================================*/
 	void compare_Q_SARSA(int max_steps, int stride) {
 		Eigen::MatrixXd Q_q_learn = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
 		Eigen::MatrixXd Q_SARSA   = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
@@ -325,7 +352,7 @@ class mdp {
 		double q_learn_error = 0;
 		double sarsa_error   = 0;
 		std::ofstream csv_file;
-		csv_file.open("comparison_8.csv");
+		csv_file.open("comparison_1000000.csv");
 		csv_file << "Q,SARSA\n";
 		for(int i=0; i<max_steps; i+=stride) {
 			Q_q_learn = Q_learning(Q_q_learn, stride, i);
@@ -339,13 +366,18 @@ class mdp {
 
 		csv_file.close();
 		std::ofstream functions;
-		functions.open("function_8.txt");
+		functions.open("function_1000000.txt");
 		functions << "Q_star" << Q_star;
 		functions << "Q_q_learn" << Q_q_learn;
 		functions << "Q_SARSA" << Q_SARSA;
 		functions.close();
 	}
 
+	/*===============================================================
+	| This function computes the optimal Q function. Is essencially
+	| the same as value iteration but returns the optimal Q function
+	| instead of the optimal policy
+	===============================================================*/
 	Eigen::MatrixXd compute_Q_star() {
 		double error = 1;
 		Eigen::MatrixXd Jcurr = Eigen::MatrixXd::Zero(_states.size(), 1);
