@@ -73,6 +73,10 @@ class mdp {
 		_states(states), _actions(actions), _transitions(transitions), 
 		_rewards(rewards), _gamma(gamma) { /*Do Nothing*/ }
 
+	/*===============================================================
+	| Compute the optimal policy with value iteration
+	| A policy is a matrix with dimensions |X|x|A|
+	===============================================================*/
 	Eigen::MatrixXd value_iteration() {
 		double error = 1;
 		Eigen::MatrixXd Jcurr = Eigen::MatrixXd::Zero(_states.size(), 1);
@@ -106,6 +110,10 @@ class mdp {
 		return compute_policy_from_J(Jcurr);
 	}
 
+	/*===============================================================
+	| Compute the optimal policy with value iteration based on J*
+	| or V*, depending on the notation you're using
+	===============================================================*/
 	Eigen::MatrixXd compute_policy_from_J(Eigen::MatrixXd J) {
 		Eigen::MatrixXd pi(_states.size(), _actions.size());
 		Eigen::MatrixXd  Q(_states.size(), _actions.size());
@@ -128,6 +136,11 @@ class mdp {
 		return pi;
 	} 
 
+	/*===============================================================
+	| Make your robot follow a policy. It will execute at most
+	| 'steps' actions. You can tell the robot to stop as soon as a
+	| goal state is reached with finish_when_in_goal
+	===============================================================*/
 	void follow_policy(Eigen::MatrixXd policy, int steps, bool finish_when_in_goal=false) {
 		ros::spinOnce();
 		int curr_state = determine_state_of_robot();
@@ -175,6 +188,10 @@ class mdp {
 		}
 	}
 
+	/*===============================================================
+	| Determine mdp state the robot is in based on the actual
+	| position of the robot in the real world
+	===============================================================*/
 	int determine_state_of_robot() {
 		Eigen::MatrixXd vector_pose(2, 1);
 		vector_pose << __x, __y;
@@ -202,6 +219,10 @@ class mdp {
 		return state;
 	}
 
+	/*===============================================================
+	| Given a policy and the current state of the robot
+	| determine the new state for the robot to go to
+	===============================================================*/
 	int determine_new_state(int curr_state, Eigen::MatrixXd policy) {
 		int action    = random_choice(policy.row(curr_state));
 		int new_state = random_choice(_transitions[action].row(curr_state));
@@ -209,6 +230,10 @@ class mdp {
 		return new_state;
 	}
 
+	/*===============================================================
+	| Given a distribution, choose randomly an index in the interval
+	| [0, dist.size()-1] based on the actual distribution
+	===============================================================*/
 	int random_choice(Eigen::MatrixXd distribution) {
 		double prob = ((double)((std::rand() % 100)+1)) / 100;
 		double sum  = 0;
