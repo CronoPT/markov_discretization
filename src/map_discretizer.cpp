@@ -48,7 +48,7 @@
 #define NORMAL -1
 #define GOAL   100
 
-#define ALPHA 0.5
+#define ALPHA 0.3
 
 double __x = 0;
 double __y = 0;
@@ -251,7 +251,7 @@ class mdp {
 
 		int s = (std::rand() % _states.size());
 		for(int i=0; i<steps; i++) {
-			int a = e_greedy(q.col(s), already_run+steps);
+			int a = e_greedy(q.row(s), already_run+i);
 			int s_prime = random_choice(_transitions[a].row(s));
 			int r = _rewards(s, a);
 
@@ -267,11 +267,11 @@ class mdp {
 		Eigen::MatrixXd q = qinit;
 
 		int s = (std::rand() % _states.size());
-		int a = e_greedy(q.col(s), already_run);
+		int a = e_greedy(q.row(s), already_run);
 		for(int i=0; i<steps; i++) {
 			int s_prime = random_choice(_transitions[a].row(s));
 			int r = _rewards(s, a);
-			int a_prime =  e_greedy(q.col(s_prime), already_run+steps+1);
+			int a_prime =  e_greedy(q.row(s_prime), already_run+i+1);
 
 			q(s, a) += ALPHA * (r + _gamma * q(s_prime, a_prime) - q(s, a)); 
 
@@ -283,13 +283,21 @@ class mdp {
 	}
 
 	int e_greedy(Eigen::MatrixXd q, int t) {
-		double eps = 1 - std::exp(-10/(t+1));
+		double eps = 0.8;
 		Eigen::MatrixXd dist(1, 2);
 		dist << eps, 1-eps;
 		int ind = random_choice(dist);
-		
-		if(ind == 0) return (std::rand() % q.cols());
-		else         return choose_from_best(q);
+
+		static int explora = 0;
+		static int exploit = 0;
+
+		if(ind==0) 
+			explora++;
+		else
+			exploit++;
+
+		if(ind == 0) return (std::rand() % q.cols()); //exploration
+		else         return choose_from_best(q);      //exploitation
 	}
 
 	int choose_from_best(Eigen::MatrixXd q) {
@@ -306,15 +314,7 @@ class mdp {
 		dist = dist / possible.size();
 		int chosen = random_choice(dist);
 
-		int index = 0;
-		for(int i=0; i<q.cols(); i++) {
-			if(std::fabs(q(i)-max)<1e-5) {
-				if(chosen == index)
-					return i;
-				else
-					index ++;
-			}
-		}
+		return possible[chosen];
 	}
 
 	void compare_Q_SARSA(int max_steps, int stride) {
@@ -324,15 +324,26 @@ class mdp {
 
 		double q_learn_error = 0;
 		double sarsa_error   = 0;
-
+		std::ofstream csv_file;
+		csv_file.open("comparison_8.csv");
+		csv_file << "Q,SARSA\n";
 		for(int i=0; i<max_steps; i+=stride) {
 			Q_q_learn = Q_learning(Q_q_learn, stride, i);
 			Q_SARSA   = SARSA(Q_SARSA, stride, i);
+		
+			q_learn_error = (Q_star - Q_q_learn).norm()/Q_star.norm();
+			sarsa_error   = (Q_star - Q_SARSA).norm()/Q_star.norm();
 
-			q_learn_error = (Q_star - Q_q_learn).norm();
-			sarsa_error   = (Q_star - Q_SARSA).norm();
+			csv_file << q_learn_error << "," << sarsa_error << "\n";
 		}
 
+		csv_file.close();
+		std::ofstream functions;
+		functions.open("function_8.txt");
+		functions << "Q_star" << Q_star;
+		functions << "Q_q_learn" << Q_q_learn;
+		functions << "Q_SARSA" << Q_SARSA;
+		functions.close();
 	}
 
 	Eigen::MatrixXd compute_Q_star() {
@@ -1306,6 +1317,8 @@ int main(int argc, char* argv[]) {
 
 	mdp mdp_1(states, actions, transitions, rewards_1, gamma);
 	mdp mdp_2(states, actions, transitions, rewards_2, gamma);
+
+	mdp_1.compare_Q_SARSA(1000000, 1000);
 
 	//Eigen::MatrixXd policy = mdp_2.value_iteration();
 
