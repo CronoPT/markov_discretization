@@ -48,6 +48,8 @@
 #define NORMAL -1
 #define GOAL   100
 
+#define ALPHA 0.5
+
 double __x = 0;
 double __y = 0;
 
@@ -242,6 +244,126 @@ class mdp {
 			sum += distribution(i);
 			if(sum >= prob) { return i; }
 		}
+	}
+
+	Eigen::MatrixXd Q_learning(Eigen::MatrixXd qinit, int steps, int already_run=0) {
+		Eigen::MatrixXd q = qinit;
+
+		int s = (std::rand() % _states.size());
+		for(int i=0; i<steps; i++) {
+			int a = e_greedy(q.col(s), already_run+steps);
+			int s_prime = random_choice(_transitions[a].row(s));
+			int r = _rewards(s, a);
+
+			q(s, a) += ALPHA * (r + _gamma * q.row(s_prime).maxCoeff() - q(s, a)); 
+
+			s = s_prime;
+		}
+
+		return q;
+	}
+
+	Eigen::MatrixXd SARSA(Eigen::MatrixXd qinit, int steps, int already_run=0) {
+		Eigen::MatrixXd q = qinit;
+
+		int s = (std::rand() % _states.size());
+		int a = e_greedy(q.col(s), already_run);
+		for(int i=0; i<steps; i++) {
+			int s_prime = random_choice(_transitions[a].row(s));
+			int r = _rewards(s, a);
+			int a_prime =  e_greedy(q.col(s_prime), already_run+steps+1);
+
+			q(s, a) += ALPHA * (r + _gamma * q(s_prime, a_prime) - q(s, a)); 
+
+			s = s_prime;
+			a = a_prime;
+		}
+
+		return q;
+	}
+
+	int e_greedy(Eigen::MatrixXd q, int t) {
+		double eps = 1 - std::exp(-10/(t+1));
+		Eigen::MatrixXd dist(1, 2);
+		dist << eps, 1-eps;
+		int ind = random_choice(dist);
+		
+		if(ind == 0) return (std::rand() % q.cols());
+		else         return choose_from_best(q);
+	}
+
+	int choose_from_best(Eigen::MatrixXd q) {
+		double max = q.maxCoeff();
+		std::vector<int> possible;
+
+		for(int i=0; i<q.cols(); i++) {
+			if(std::fabs(q(i)-max)<1e-5) 
+				possible.push_back(i);
+		}
+
+		Eigen::MatrixXd dist(possible.size(), 1);
+		dist.fill(1);
+		dist = dist / possible.size();
+		int chosen = random_choice(dist);
+
+		int index = 0;
+		for(int i=0; i<q.cols(); i++) {
+			if(std::fabs(q(i)-max)<1e-5) {
+				if(chosen == index)
+					return i;
+				else
+					index ++;
+			}
+		}
+	}
+
+	void compare_Q_SARSA(int max_steps, int stride) {
+		Eigen::MatrixXd Q_q_learn = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
+		Eigen::MatrixXd Q_SARSA   = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
+		Eigen::MatrixXd Q_star    = compute_Q_star();
+
+		double q_learn_error = 0;
+		double sarsa_error   = 0;
+
+		for(int i=0; i<max_steps; i+=stride) {
+			Q_q_learn = Q_learning(Q_q_learn, stride, i);
+			Q_SARSA   = SARSA(Q_SARSA, stride, i);
+
+			q_learn_error = (Q_star - Q_q_learn).norm();
+			sarsa_error   = (Q_star - Q_SARSA).norm();
+		}
+
+	}
+
+	Eigen::MatrixXd compute_Q_star() {
+		double error = 1;
+		Eigen::MatrixXd Jcurr = Eigen::MatrixXd::Zero(_states.size(), 1);
+
+		Eigen::MatrixXd ca;
+		Eigen::MatrixXd Jprev;
+		Eigen::MatrixXd Pa;
+		Eigen::MatrixXd Qmax;
+		Eigen::MatrixXd Qa;
+
+		while(error > 1e-8) {
+			for(int i=0; i<_actions.size(); i++) {
+				ca = _rewards.col(i);
+				Pa = _transitions[i];
+				Qa = ca + _gamma * Pa * Jcurr;
+				if(i==0) { Qmax = Qa; }
+				else     { Qmax = Qmax.array().max(Qa.array()); }  
+			}
+
+			Jprev = Jcurr;
+			Jcurr = Qmax;
+			error = (Jcurr - Jprev).norm();	
+		}
+
+		Eigen::MatrixXd  Q_star(_states.size(), _actions.size());
+		for(int i=0; i<_actions.size(); i++)
+			Q_star.col(i) = _rewards.col(i) + _gamma * _transitions[i] * Jcurr;
+
+		return Q_star;
 	}
 
 };
@@ -1189,7 +1311,7 @@ int main(int argc, char* argv[]) {
 
 	//std::cout << policy << std::endl;
 
-	mdp_switcher(mdp_1, mdp_2, 2);
+	//mdp_switcher(mdp_1, mdp_2, 2);
 
 	/*PROOF THAT THE VALUE ITERATION WORKS*/
 	// std::vector<std::pair<float, float>> states = {std::pair<float, float>(1, 1),
