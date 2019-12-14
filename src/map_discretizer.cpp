@@ -26,8 +26,8 @@
 
 #include "nav_msgs/GetMap.h"
 
-#define SUCC 0.90
-#define FAIL 0.10/3
+#define SUCC 0.60
+#define FAIL 0.40/3
 
 #define RED1  0
 #define RED2  11
@@ -74,6 +74,8 @@ class mdp {
 	    std::vector<Eigen::MatrixXd> transitions, Eigen::MatrixXd rewards, double gamma):
 		_states(states), _actions(actions), _transitions(transitions), 
 		_rewards(rewards), _gamma(gamma) { /*Do Nothing*/ }
+	
+	std::vector<std::pair<float, float>> states() const { return _states; }
 
 	/*===============================================================
 	| Compute the optimal policy with value iteration
@@ -127,7 +129,7 @@ class mdp {
 		int coef = 0;
 		for(int i=0; i<_states.size(); i++) {
 			for(int j=0; j<_actions.size(); j++) {
-				if(std::fabs(Q(i, j)-J(i))<1e-5) {
+				if(std::fabs(Q(i, j)-J(i))<1e-3) {
 					pi(i, j) = 1;
 					coef++;
 				}
@@ -889,8 +891,6 @@ class map_discretizer {
 		determine_square_colors();
 		determine_pixel_rewards_colors(rewards);
 
-		std::cout << "Where was it?" << std::endl;
-
 		std::ofstream img(path);
 		img << "P3" << std::endl;
 		img << _map.info.width*_scale << " " << _map.info.height*_scale << std::endl;
@@ -921,6 +921,417 @@ class map_discretizer {
 				}
 				else if(_pixel_colors[x][y] == GREEN) {
 					img << 117 << " " << 255 << " " << 168 << std::endl;
+				}
+			}
+		}
+	}
+
+	bool is_arrow(int x, int y) {
+		std::vector<std::pair<int, int>> arrow;
+		arrow.push_back(std::pair<int, int>(5, 5));
+		arrow.push_back(std::pair<int, int>(24, 5));
+
+		arrow.push_back(std::pair<int, int>(5, 6));
+		arrow.push_back(std::pair<int, int>(6, 6));
+		arrow.push_back(std::pair<int, int>(23, 6));
+		arrow.push_back(std::pair<int, int>(24, 6));
+
+		arrow.push_back(std::pair<int, int>(5, 7));
+		arrow.push_back(std::pair<int, int>(6, 7));
+		arrow.push_back(std::pair<int, int>(7, 7));
+		arrow.push_back(std::pair<int, int>(22, 7));
+		arrow.push_back(std::pair<int, int>(23, 7));
+		arrow.push_back(std::pair<int, int>(24, 7));
+
+		arrow.push_back(std::pair<int, int>(5, 8));
+		arrow.push_back(std::pair<int, int>(6, 8));
+		arrow.push_back(std::pair<int, int>(7, 8));
+		arrow.push_back(std::pair<int, int>(8, 8));
+		arrow.push_back(std::pair<int, int>(21, 8));
+		arrow.push_back(std::pair<int, int>(22, 8));
+		arrow.push_back(std::pair<int, int>(23, 8));
+		arrow.push_back(std::pair<int, int>(24, 8));
+
+		arrow.push_back(std::pair<int, int>(5, 9));
+		arrow.push_back(std::pair<int, int>(6, 9));
+		arrow.push_back(std::pair<int, int>(7, 9));
+		arrow.push_back(std::pair<int, int>(8, 9));
+		arrow.push_back(std::pair<int, int>(21, 9));
+		arrow.push_back(std::pair<int, int>(22, 9));
+		arrow.push_back(std::pair<int, int>(23, 9));
+		arrow.push_back(std::pair<int, int>(24, 9));
+
+		arrow.push_back(std::pair<int, int>(5, 10));
+		arrow.push_back(std::pair<int, int>(6, 10));
+		arrow.push_back(std::pair<int, int>(7, 10));
+		arrow.push_back(std::pair<int, int>(8, 10));
+		arrow.push_back(std::pair<int, int>(9, 10));
+		arrow.push_back(std::pair<int, int>(20, 10));
+		arrow.push_back(std::pair<int, int>(21, 10));
+		arrow.push_back(std::pair<int, int>(22, 10));
+		arrow.push_back(std::pair<int, int>(23, 10));
+		arrow.push_back(std::pair<int, int>(24, 10));
+
+		arrow.push_back(std::pair<int, int>(5, 11));
+		arrow.push_back(std::pair<int, int>(6, 11));
+		arrow.push_back(std::pair<int, int>(7, 11));
+		arrow.push_back(std::pair<int, int>(8, 11));
+		arrow.push_back(std::pair<int, int>(9, 11));
+		arrow.push_back(std::pair<int, int>(10, 11));
+		arrow.push_back(std::pair<int, int>(19, 11));
+		arrow.push_back(std::pair<int, int>(20, 11));
+		arrow.push_back(std::pair<int, int>(21, 11));
+		arrow.push_back(std::pair<int, int>(22, 11));
+		arrow.push_back(std::pair<int, int>(23, 11));
+		arrow.push_back(std::pair<int, int>(24, 11));
+
+		arrow.push_back(std::pair<int, int>(5, 12));
+		arrow.push_back(std::pair<int, int>(6, 12));
+		arrow.push_back(std::pair<int, int>(7, 12));
+		arrow.push_back(std::pair<int, int>(8, 12));
+		arrow.push_back(std::pair<int, int>(9, 12));
+		arrow.push_back(std::pair<int, int>(10, 12));
+		arrow.push_back(std::pair<int, int>(11, 12));
+		arrow.push_back(std::pair<int, int>(18, 12));
+		arrow.push_back(std::pair<int, int>(19, 12));
+		arrow.push_back(std::pair<int, int>(20, 12));
+		arrow.push_back(std::pair<int, int>(21, 12));
+		arrow.push_back(std::pair<int, int>(22, 12));
+		arrow.push_back(std::pair<int, int>(23, 12));
+		arrow.push_back(std::pair<int, int>(24, 12));
+
+		arrow.push_back(std::pair<int, int>(5, 13));
+		arrow.push_back(std::pair<int, int>(6, 13));
+		arrow.push_back(std::pair<int, int>(7, 13));
+		arrow.push_back(std::pair<int, int>(8, 13));
+		arrow.push_back(std::pair<int, int>(9, 13));
+		arrow.push_back(std::pair<int, int>(10, 13));
+		arrow.push_back(std::pair<int, int>(11, 13));
+		arrow.push_back(std::pair<int, int>(12, 13));
+		arrow.push_back(std::pair<int, int>(17, 13));
+		arrow.push_back(std::pair<int, int>(18, 13));
+		arrow.push_back(std::pair<int, int>(19, 13));
+		arrow.push_back(std::pair<int, int>(20, 13));
+		arrow.push_back(std::pair<int, int>(21, 13));
+		arrow.push_back(std::pair<int, int>(22, 13));
+		arrow.push_back(std::pair<int, int>(23, 13));
+		arrow.push_back(std::pair<int, int>(24, 13));
+
+		arrow.push_back(std::pair<int, int>(5, 14));
+		arrow.push_back(std::pair<int, int>(6, 14));
+		arrow.push_back(std::pair<int, int>(7, 14));
+		arrow.push_back(std::pair<int, int>(8, 14));
+		arrow.push_back(std::pair<int, int>(9, 14));
+		arrow.push_back(std::pair<int, int>(10, 14));
+		arrow.push_back(std::pair<int, int>(11, 14));
+		arrow.push_back(std::pair<int, int>(12, 14));
+		arrow.push_back(std::pair<int, int>(13, 14));
+		arrow.push_back(std::pair<int, int>(14, 14));
+		arrow.push_back(std::pair<int, int>(15, 14));
+		arrow.push_back(std::pair<int, int>(16, 14));
+		arrow.push_back(std::pair<int, int>(17, 14));
+		arrow.push_back(std::pair<int, int>(18, 14));
+		arrow.push_back(std::pair<int, int>(19, 14));
+		arrow.push_back(std::pair<int, int>(20, 14));
+		arrow.push_back(std::pair<int, int>(21, 14));
+		arrow.push_back(std::pair<int, int>(22, 14));
+		arrow.push_back(std::pair<int, int>(23, 14));
+		arrow.push_back(std::pair<int, int>(24, 14));
+
+		arrow.push_back(std::pair<int, int>(5, 15));
+		arrow.push_back(std::pair<int, int>(6, 15));
+		arrow.push_back(std::pair<int, int>(7, 15));
+		arrow.push_back(std::pair<int, int>(8, 15));
+		arrow.push_back(std::pair<int, int>(9, 15));
+		arrow.push_back(std::pair<int, int>(10, 15));
+		arrow.push_back(std::pair<int, int>(11, 15));
+		arrow.push_back(std::pair<int, int>(12, 15));
+		arrow.push_back(std::pair<int, int>(13, 15));
+		arrow.push_back(std::pair<int, int>(14, 15));
+		arrow.push_back(std::pair<int, int>(15, 15));
+		arrow.push_back(std::pair<int, int>(16, 15));
+		arrow.push_back(std::pair<int, int>(17, 15));
+		arrow.push_back(std::pair<int, int>(18, 15));
+		arrow.push_back(std::pair<int, int>(19, 15));
+		arrow.push_back(std::pair<int, int>(20, 15));
+		arrow.push_back(std::pair<int, int>(21, 15));
+		arrow.push_back(std::pair<int, int>(22, 15));
+		arrow.push_back(std::pair<int, int>(23, 15));
+		arrow.push_back(std::pair<int, int>(24, 15));
+
+		arrow.push_back(std::pair<int, int>(6, 16));
+		arrow.push_back(std::pair<int, int>(7, 16));
+		arrow.push_back(std::pair<int, int>(8, 16));
+		arrow.push_back(std::pair<int, int>(9, 16));
+		arrow.push_back(std::pair<int, int>(10, 16));
+		arrow.push_back(std::pair<int, int>(11, 16));
+		arrow.push_back(std::pair<int, int>(12, 16));
+		arrow.push_back(std::pair<int, int>(13, 16));
+		arrow.push_back(std::pair<int, int>(14, 16));
+		arrow.push_back(std::pair<int, int>(15, 16));
+		arrow.push_back(std::pair<int, int>(16, 16));
+		arrow.push_back(std::pair<int, int>(17, 16));
+		arrow.push_back(std::pair<int, int>(18, 16));
+		arrow.push_back(std::pair<int, int>(19, 16));
+		arrow.push_back(std::pair<int, int>(20, 16));
+		arrow.push_back(std::pair<int, int>(21, 16));
+		arrow.push_back(std::pair<int, int>(22, 16));
+		arrow.push_back(std::pair<int, int>(23, 16));
+
+		arrow.push_back(std::pair<int, int>(7, 17));
+		arrow.push_back(std::pair<int, int>(8, 17));
+		arrow.push_back(std::pair<int, int>(9, 17));
+		arrow.push_back(std::pair<int, int>(10, 17));
+		arrow.push_back(std::pair<int, int>(11, 17));
+		arrow.push_back(std::pair<int, int>(12, 17));
+		arrow.push_back(std::pair<int, int>(13, 17));
+		arrow.push_back(std::pair<int, int>(14, 17));
+		arrow.push_back(std::pair<int, int>(15, 17));
+		arrow.push_back(std::pair<int, int>(16, 17));
+		arrow.push_back(std::pair<int, int>(17, 17));
+		arrow.push_back(std::pair<int, int>(18, 17));
+		arrow.push_back(std::pair<int, int>(19, 17));
+		arrow.push_back(std::pair<int, int>(20, 17));
+		arrow.push_back(std::pair<int, int>(21, 17));
+		arrow.push_back(std::pair<int, int>(22, 17));
+
+
+		arrow.push_back(std::pair<int, int>(8, 18));
+		arrow.push_back(std::pair<int, int>(9, 18));
+		arrow.push_back(std::pair<int, int>(10, 18));
+		arrow.push_back(std::pair<int, int>(11, 18));
+		arrow.push_back(std::pair<int, int>(12, 18));
+		arrow.push_back(std::pair<int, int>(13, 18));
+		arrow.push_back(std::pair<int, int>(14, 18));
+		arrow.push_back(std::pair<int, int>(15, 18));
+		arrow.push_back(std::pair<int, int>(16, 18));
+		arrow.push_back(std::pair<int, int>(17, 18));
+		arrow.push_back(std::pair<int, int>(18, 18));
+		arrow.push_back(std::pair<int, int>(19, 18));
+		arrow.push_back(std::pair<int, int>(20, 18));
+		arrow.push_back(std::pair<int, int>(21, 18));
+
+		arrow.push_back(std::pair<int, int>(9, 19));
+		arrow.push_back(std::pair<int, int>(10, 19));
+		arrow.push_back(std::pair<int, int>(11, 19));
+		arrow.push_back(std::pair<int, int>(18, 19));
+		arrow.push_back(std::pair<int, int>(12, 19));
+		arrow.push_back(std::pair<int, int>(13, 19));
+		arrow.push_back(std::pair<int, int>(14, 19));
+		arrow.push_back(std::pair<int, int>(15, 19));
+		arrow.push_back(std::pair<int, int>(16, 19));
+		arrow.push_back(std::pair<int, int>(17, 19));
+		arrow.push_back(std::pair<int, int>(18, 19));
+		arrow.push_back(std::pair<int, int>(19, 19));
+		arrow.push_back(std::pair<int, int>(20, 19));
+
+		arrow.push_back(std::pair<int, int>(10, 20));
+		arrow.push_back(std::pair<int, int>(19, 20));
+		arrow.push_back(std::pair<int, int>(11, 20));
+		arrow.push_back(std::pair<int, int>(18, 20));
+		arrow.push_back(std::pair<int, int>(12, 20));
+		arrow.push_back(std::pair<int, int>(13, 20));
+		arrow.push_back(std::pair<int, int>(14, 20));
+		arrow.push_back(std::pair<int, int>(15, 20));
+		arrow.push_back(std::pair<int, int>(16, 20));
+		arrow.push_back(std::pair<int, int>(17, 20));
+		
+		arrow.push_back(std::pair<int, int>(11, 21));
+		arrow.push_back(std::pair<int, int>(18, 21));
+		arrow.push_back(std::pair<int, int>(12, 21));
+		arrow.push_back(std::pair<int, int>(17, 21));
+		arrow.push_back(std::pair<int, int>(13, 21));
+		arrow.push_back(std::pair<int, int>(14, 21));
+		arrow.push_back(std::pair<int, int>(15, 21));
+		arrow.push_back(std::pair<int, int>(16, 21));
+
+		arrow.push_back(std::pair<int, int>(12, 22));
+		arrow.push_back(std::pair<int, int>(17, 22));
+		arrow.push_back(std::pair<int, int>(13, 22));
+		arrow.push_back(std::pair<int, int>(14, 22));
+		arrow.push_back(std::pair<int, int>(15, 22));
+		arrow.push_back(std::pair<int, int>(16, 22));
+
+		arrow.push_back(std::pair<int, int>(13, 23));
+		arrow.push_back(std::pair<int, int>(14, 23));
+		arrow.push_back(std::pair<int, int>(15, 23));
+		arrow.push_back(std::pair<int, int>(16, 23));
+
+		arrow.push_back(std::pair<int, int>(14, 24));
+		arrow.push_back(std::pair<int, int>(15, 24));
+
+		for(auto ar : arrow) {
+			if(ar.first == x && ar.second == y) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+		bool is_multi_arrow(int x, int y) {
+		std::vector<std::pair<int, int>> arrow;
+		arrow.push_back(std::pair<int, int>(11, 19));
+		arrow.push_back(std::pair<int, int>(12, 19));
+		arrow.push_back(std::pair<int, int>(13, 19));
+		arrow.push_back(std::pair<int, int>(14, 19));
+		arrow.push_back(std::pair<int, int>(15, 19));
+		arrow.push_back(std::pair<int, int>(16, 19));
+		arrow.push_back(std::pair<int, int>(17, 19));
+		arrow.push_back(std::pair<int, int>(18, 19));
+		arrow.push_back(std::pair<int, int>(12, 20));
+		arrow.push_back(std::pair<int, int>(13, 20));
+		arrow.push_back(std::pair<int, int>(14, 20));
+		arrow.push_back(std::pair<int, int>(15, 20));
+		arrow.push_back(std::pair<int, int>(16, 20));
+		arrow.push_back(std::pair<int, int>(17, 20));
+		arrow.push_back(std::pair<int, int>(12, 21));
+		arrow.push_back(std::pair<int, int>(13, 21));
+		arrow.push_back(std::pair<int, int>(14, 21));
+		arrow.push_back(std::pair<int, int>(15, 21));
+		arrow.push_back(std::pair<int, int>(16, 21));
+		arrow.push_back(std::pair<int, int>(17, 21));
+		arrow.push_back(std::pair<int, int>(13, 22));
+		arrow.push_back(std::pair<int, int>(14, 22));
+		arrow.push_back(std::pair<int, int>(15, 22));
+		arrow.push_back(std::pair<int, int>(16, 22));
+		arrow.push_back(std::pair<int, int>(13, 23));
+		arrow.push_back(std::pair<int, int>(14, 23));
+		arrow.push_back(std::pair<int, int>(15, 23));
+		arrow.push_back(std::pair<int, int>(16, 23));
+		arrow.push_back(std::pair<int, int>(14, 24));
+		arrow.push_back(std::pair<int, int>(15, 24));
+		arrow.push_back(std::pair<int, int>(14, 25));
+		arrow.push_back(std::pair<int, int>(15, 25));
+
+		for(auto ar : arrow) {
+			if(ar.first == x && ar.second == y) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	bool more_than_one_possible(Eigen::MatrixXd policy_line) {
+		int val = 0;
+		for(int i=0; i<policy_line.cols(); i++) {
+			if(policy_line(i)>0) {
+				val++;
+			}
+		}
+
+		return (val>1);
+	}
+
+	/*===============================================================
+	| Paint a picture with the discretized map, scaled with _scale,
+	| at this point cells that are slightly occupied in the real 
+	| world will be painted all black - the colored squares will
+	| be the only cells considered to build the mdp and squares will
+	| be color coded to represent the reward of executing an action
+	| in that specific state
+	===============================================================*/
+	void paint_chess_filtered_reward_map_with_policy(const std::string& path, 
+	                                                 Eigen::MatrixXd rewards,
+													 Eigen::MatrixXd policy) {
+
+		determine_square_colors();
+		determine_pixel_rewards_colors(rewards);
+
+		std::ofstream img(path);
+		img << "P3" << std::endl;
+		img << _map.info.width*5 << " " << _map.info.height*5 << std::endl;
+		img << "255" << std::endl;
+
+		int my_cell_width = 30;
+		int my_cell_height = 30;
+
+		for(int y=_map.info.height*5-1; y>=0; y--) {
+			for(int x=0; x<_map.info.width*5; x++) {
+				int actual_x = x/5;
+				int actual_y = y/5;
+				if(_pixel_colors[actual_x][actual_y] == BLACK) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+					continue;
+				}
+				else if(_pixel_colors[actual_x][actual_y] == ORANG) {
+					img << 235 << " " << 158 << " " << 52 << std::endl;
+					continue;
+				}
+
+				/* Try to do that arrow thing */
+				int my_cell_pixel_x = (x-_init_x*5)%30;
+				int my_cell_pixel_y = (y-_init_y*5)%30;
+				auto square = determine_square_of_pixel(actual_x, actual_y);
+				int index   = get_index_of_state_square(square.first, square.second);
+
+				if( more_than_one_possible(policy.row(index)) ) {
+					// up
+					if(policy(index, 0)>0 && is_multi_arrow(my_cell_pixel_x, my_cell_pixel_y)) { 
+						img << 0 << " " << 0 << " " << 0 << std::endl;
+					}
+					// down
+					else if(policy(index, 1)>0 && is_multi_arrow(29-my_cell_pixel_x, 29-my_cell_pixel_y)) {
+						img << 0 << " " << 0 << " " << 0 << std::endl;
+					}
+					// right
+					else if(policy(index, 2)>0 && is_multi_arrow(my_cell_pixel_y, my_cell_pixel_x)) {
+						img << 0 << " " << 0 << " " << 0 << std::endl;
+					}
+					// left
+					else if(policy(index, 3)>0 && is_multi_arrow(29-my_cell_pixel_y, 29-my_cell_pixel_x)) {
+						img << 0 << " " << 0 << " " << 0 << std::endl;
+					}
+					else {
+						if(_pixel_colors[actual_x][actual_y] == RED1) {
+							img << 255 << " " << 110 << " " << 110 << std::endl;
+						}
+						else if(_pixel_colors[actual_x][actual_y] == RED2) {
+							img << 235 << " " << 52 << " " << 52 << std::endl;
+						}
+						else if(_pixel_colors[actual_x][actual_y] == BLUE1) {
+							img << 52 << " " << 143 << " " << 235 << std::endl;
+						}
+						else if(_pixel_colors[actual_x][actual_y] == BLUE2) {
+							img << 52 << " " << 85 << " " << 235 << std::endl;
+						}
+						else if(_pixel_colors[actual_x][actual_y] == GREEN) {
+							img << 117 << " " << 255 << " " << 168 << std::endl;
+						}
+					}
+					
+				}
+				// only possible action an it's up
+				else if(policy(index, 0)>0 && is_arrow(my_cell_pixel_x, my_cell_pixel_y)) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				// only possible action an it's down
+				else if(policy(index, 1)>0 && is_arrow(29-my_cell_pixel_x, 29-my_cell_pixel_y)) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				// only possible action an it's right
+				else if(policy(index, 2)>0 && is_arrow(my_cell_pixel_y, my_cell_pixel_x)) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				// only possible action an it's left
+				else if(policy(index, 3)>0 && is_arrow(29-my_cell_pixel_y, 29-my_cell_pixel_x)) {
+					img << 0 << " " << 0 << " " << 0 << std::endl;
+				}
+				else {
+					if(_pixel_colors[actual_x][actual_y] == RED1) {
+						img << 255 << " " << 110 << " " << 110 << std::endl;
+					}
+					else if(_pixel_colors[actual_x][actual_y] == RED2) {
+						img << 235 << " " << 52 << " " << 52 << std::endl;
+					}
+					else if(_pixel_colors[actual_x][actual_y] == BLUE1) {
+						img << 52 << " " << 143 << " " << 235 << std::endl;
+					}
+					else if(_pixel_colors[actual_x][actual_y] == BLUE2) {
+						img << 52 << " " << 85 << " " << 235 << std::endl;
+					}
+					else if(_pixel_colors[actual_x][actual_y] == GREEN) {
+						img << 117 << " " << 255 << " " << 168 << std::endl;
+					}
 				}
 			}
 		}
@@ -1301,10 +1712,9 @@ int main(int argc, char* argv[]) {
 	
 	map_discretizer m_d(resp.map, 0.3, 5);
 
-	m_d.paint_chess_filtered_map("filtered_map.ppm");
-	m_d.paint_chess_map("squared_map.ppm");
-	// m_d.paint_map("normal_map.ppm");
-	// m_d.print_position_of_pixel(100, 100);
+	//m_d.paint_chess_filtered_map("filtered_map.ppm");
+	//m_d.paint_chess_map("squared_map.ppm");
+	//m_d.paint_map("normal_map.ppm");
 	m_d.compute_network();
 	//ROS_INFO("Result grid size <%d x %d>", m_d.discretized_grid_size_x(), m_d.discretized_grid_size_y());
 	
@@ -1313,8 +1723,10 @@ int main(int argc, char* argv[]) {
 	std::vector<std::string> actions = {UP, DOWN, RIGHT, LEFT};
 	double gamma = 0.9;
 
-	std::pair<float, float> goal_1(3.55, 2.70);
+	std::pair<float, float> goal_1(2.65, 2.40);
 	std::vector<std::pair<float, float>> to_avoid_1;
+
+	/* Start of security cells */
 	to_avoid_1.push_back(std::pair<float, float>(-1.85, 3.30));
 	to_avoid_1.push_back(std::pair<float, float>(-1.85, 3.00));
 	to_avoid_1.push_back(std::pair<float, float>(-1.85, 2.70));
@@ -1542,12 +1954,33 @@ int main(int argc, char* argv[]) {
 	to_avoid_1.push_back(std::pair<float, float>(-1.25, 1.80));
 	to_avoid_1.push_back(std::pair<float, float>(-0.95, 2.10));
 	to_avoid_1.push_back(std::pair<float, float>(-0.95, 1.80));
+	/* End of security cells */
 
+	/* Start of cells that we wanna explores*/
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 2.10));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 2.10));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 2.10));
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 1.80));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 1.80));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 1.80));
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 1.50));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 1.50));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 1.50));
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 1.20));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 1.20));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 1.20));
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 0.90));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 0.90));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 0.90));
+	to_avoid_1.push_back(std::pair<float, float>(2.35, 0.60));
+	to_avoid_1.push_back(std::pair<float, float>(2.65, 0.60));
+	to_avoid_1.push_back(std::pair<float, float>(2.95, 0.60));
+	/* End of cells that we wanna explores*/
 
 
 
 	Eigen::MatrixXd rewards_1 = m_d.build_rewards_for_mdp(goal_1, to_avoid_1);
-	m_d.paint_chess_filtered_reward_map("rewards_map_1.ppm", rewards_1);
+	//m_d.paint_chess_filtered_reward_map("rewards_map_1.ppm", rewards_1);
 
 	// std::pair<float, float> goal_2(0.75, 0.90);
 	// std::vector<std::pair<float, float>> to_avoid_2;
@@ -1565,12 +1998,27 @@ int main(int argc, char* argv[]) {
 	//Eigen::MatrixXd rewards_2 = m_d.build_rewards_for_mdp(goal_2, to_avoid_2);
 	//m_d.paint_chess_filtered_reward_map("rewards_map_2.ppm", rewards_2);
 
-	//mdp mdp_1(states, actions, transitions, rewards_1, gamma);
+	mdp mdp_1(states, actions, transitions, rewards_1, gamma);
 	//mdp mdp_2(states, actions, transitions, rewards_2, gamma);
 
 	//mdp_1.compare_Q_SARSA(1000000, 1000);
 
-	//Eigen::MatrixXd policy = mdp_2.value_iteration();
+	Eigen::MatrixXd policy = mdp_1.value_iteration();
+
+	m_d.paint_chess_filtered_reward_map_with_policy("arrow.ppm", rewards_1, policy);
+
+	// std::ofstream functions;
+	// functions.open("policy_60.txt");
+	
+	// for(int i=0; i<policy.rows(); i++) {
+	// 	functions << std::setprecision(2) << std::fixed;
+	// 	functions << "State " << i << " -    \t";
+	// 	functions << "(" << mdp_1.states()[i].first;
+	// 	functions << " , " << mdp_1.states()[i].second;
+	// 	functions << ")   \t--> " << policy.row(i) << "\n";
+	// }
+	
+	// functions.close();
 
 	//std::cout << policy << std::endl;
 
