@@ -26,8 +26,8 @@
 
 #include "nav_msgs/GetMap.h"
 
-#define SUCC 0.60
-#define FAIL 0.40/3
+#define SUCC 0.90
+#define FAIL 0.10/3
 
 #define RED1  0
 #define RED2  11
@@ -301,7 +301,7 @@ class mdp {
 	| in a given reinforcement learning algorithm step
 	===============================================================*/
 	int e_greedy(Eigen::MatrixXd q, int t) {
-		double eps = std::exp(-(t/1000000));//0.8;
+		double eps = std::exp(-((2*t)/1000000));//0.8;
 		Eigen::MatrixXd dist(1, 2);
 		dist << eps, 1-eps;
 		int ind = random_choice(dist);
@@ -346,7 +346,7 @@ class mdp {
 	| the recorded data (this function also writes to a csv file
 	| so that error can then be ploted)
 	===============================================================*/
-	void compare_Q_SARSA(int max_steps, int stride) {
+	std::pair<Eigen::MatrixXd, Eigen::MatrixXd> compare_Q_SARSA(int max_steps, int stride) {
 		Eigen::MatrixXd Q_q_learn = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
 		Eigen::MatrixXd Q_SARSA   = Eigen::MatrixXd::Zero(_states.size(), _actions.size());
 		Eigen::MatrixXd Q_star    = compute_Q_star();
@@ -354,7 +354,7 @@ class mdp {
 		double q_learn_error = 0;
 		double sarsa_error   = 0;
 		std::ofstream csv_file;
-		csv_file.open("comparison_1000000.csv");
+		csv_file.open("comparison_2_1000000.csv");
 		csv_file << "Q,SARSA\n";
 		for(int i=0; i<max_steps; i+=stride) {
 			Q_q_learn = Q_learning(Q_q_learn, stride, i);
@@ -366,13 +366,54 @@ class mdp {
 			csv_file << q_learn_error << "," << sarsa_error << "\n";
 		}
 
-		csv_file.close();
-		std::ofstream functions;
-		functions.open("function_1000000.txt");
-		functions << "Q_star" << Q_star;
-		functions << "Q_q_learn" << Q_q_learn;
-		functions << "Q_SARSA" << Q_SARSA;
-		functions.close();
+		/* Build policy for Q-learning */
+		Eigen::MatrixXd pi_Q(_states.size(), _actions.size());
+		Eigen::MatrixXd J_Q(_states.size(), 1);
+		for(int i=0; i<_states.size(); i++) {
+			J_Q(i) = Q_q_learn.row(i).maxCoeff();
+		}
+		pi_Q.fill(0);
+		int coef = 0;
+		for(int i=0; i<_states.size(); i++) {
+			for(int j=0; j<_actions.size(); j++) {
+				if(std::fabs(Q_q_learn(i, j)-J_Q(i))<1e-3) {
+					pi_Q(i, j) = 1;
+					coef++;
+				}
+			}
+			pi_Q.row(i) /= coef;
+			coef = 0;
+		}
+
+		/* Build the policy for SARSA */
+		Eigen::MatrixXd pi_sarsa(_states.size(), _actions.size());
+		Eigen::MatrixXd J_sarsa(_states.size(), 1);
+		for(int i=0; i<_states.size(); i++) {
+			J_sarsa(i) = Q_SARSA.row(i).maxCoeff();
+		}
+		pi_sarsa.fill(0);
+		coef = 0;
+		for(int i=0; i<_states.size(); i++) {
+			for(int j=0; j<_actions.size(); j++) {
+				if(std::fabs(Q_SARSA(i, j)-J_sarsa(i))<1e-3) {
+					pi_sarsa(i, j) = 1;
+					coef++;
+				}
+			}
+			pi_sarsa.row(i) /= coef;
+			coef = 0;
+		}
+
+		/* Returns the policies the agent follows when exploiting */
+		return std::pair<Eigen::MatrixXd, Eigen::MatrixXd>(pi_Q, pi_sarsa);
+
+		// csv_file.close();
+		// std::ofstream functions;
+		// functions.open("function_20.txt");
+		// functions << "Q_star" << Q_star;
+		// functions << "Q_q_learn" << Q_q_learn;
+		// functions << "Q_SARSA" << Q_SARSA;
+		// functions.close();
 	}
 
 	/*===============================================================
@@ -926,6 +967,12 @@ class map_discretizer {
 		}
 	}
 
+	/*===============================================================
+	| In a grid of 30x30 see if the specified coordinates constitute
+	| a point that will help build the arrows to print the policy
+	| in the map - for when the policy prescribes only one state
+	| for this particular state
+	===============================================================*/
 	bool is_arrow(int x, int y) {
 		std::vector<std::pair<int, int>> arrow;
 		arrow.push_back(std::pair<int, int>(5, 5));
@@ -1168,7 +1215,13 @@ class map_discretizer {
 		return false;
 	}
 
-		bool is_multi_arrow(int x, int y) {
+	/*===============================================================
+	| In a grid of 30x30 see if the specified coordinates constitute
+	| a point that will help build the arrows to print the policy
+	| in the map - for when the policy prescribes more than one 
+	|state for this particular state
+	===============================================================*/
+	bool is_multi_arrow(int x, int y) {
 		std::vector<std::pair<int, int>> arrow;
 		arrow.push_back(std::pair<int, int>(11, 19));
 		arrow.push_back(std::pair<int, int>(12, 19));
@@ -1211,6 +1264,10 @@ class map_discretizer {
 		return false;
 	}
 
+	/*===============================================================
+	| Returns true if the policy prescribes to only one action
+	| in this particular row and false otherwise.
+	===============================================================*/
 	bool more_than_one_possible(Eigen::MatrixXd policy_line) {
 		int val = 0;
 		for(int i=0; i<policy_line.cols(); i++) {
@@ -1223,12 +1280,10 @@ class map_discretizer {
 	}
 
 	/*===============================================================
-	| Paint a picture with the discretized map, scaled with _scale,
-	| at this point cells that are slightly occupied in the real 
-	| world will be painted all black - the colored squares will
-	| be the only cells considered to build the mdp and squares will
-	| be color coded to represent the reward of executing an action
-	| in that specific state
+	| Paint a picture with the discretized map, scaled with a factor
+	| of 5 and the actions prescribed by the policy in the 
+	| correspondent cells. FIXME - this function is not generic yet,
+	| it will only work well for a cell_size of 30cm 
 	===============================================================*/
 	void paint_chess_filtered_reward_map_with_policy(const std::string& path, 
 	                                                 Eigen::MatrixXd rewards,
@@ -1680,6 +1735,11 @@ class map_discretizer {
 
 };
 
+/*===================================================================
+| Allows to switch between 2 MDPs. As soon as one reaches it's goal
+| the other will be triggered. This happens in a loop and each
+| mdp will run 'runs' times. 
+===================================================================*/
 void mdp_switcher(mdp mdp_1, mdp mdp_2, int runs) {
 	Eigen::MatrixXd policy_1 = mdp_1.value_iteration();
 	Eigen::MatrixXd policy_2 = mdp_2.value_iteration();
@@ -2001,67 +2061,22 @@ int main(int argc, char* argv[]) {
 	mdp mdp_1(states, actions, transitions, rewards_1, gamma);
 	//mdp mdp_2(states, actions, transitions, rewards_2, gamma);
 
-	//mdp_1.compare_Q_SARSA(1000000, 1000);
-
 	Eigen::MatrixXd policy = mdp_1.value_iteration();
+	auto policies = mdp_1.compare_Q_SARSA(1000000, 1000);
+	m_d.paint_chess_filtered_reward_map_with_policy("arrow_q_learning.ppm", rewards_1, policies.first);
+	m_d.paint_chess_filtered_reward_map_with_policy("arrow_sarsa.ppm", rewards_1, policies.first);
 
-	m_d.paint_chess_filtered_reward_map_with_policy("arrow.ppm", rewards_1, policy);
+	double error_q = (policy - policies.first).norm() / policy.norm();
+	double error_sarsa = (policy - policies.second).norm() / policy.norm();
 
-	// std::ofstream functions;
-	// functions.open("policy_60.txt");
-	
-	// for(int i=0; i<policy.rows(); i++) {
-	// 	functions << std::setprecision(2) << std::fixed;
-	// 	functions << "State " << i << " -    \t";
-	// 	functions << "(" << mdp_1.states()[i].first;
-	// 	functions << " , " << mdp_1.states()[i].second;
-	// 	functions << ")   \t--> " << policy.row(i) << "\n";
-	// }
-	
-	// functions.close();
+	std::cout << "Q-learning policy error -> " << error_q << std::endl;
+	std::cout << "SARSA      policy error -> " << error_sarsa << std::endl;
 
-	//std::cout << policy << std::endl;
+	//Eigen::MatrixXd policy = mdp_1.value_iteration();
+
+	//m_d.paint_chess_filtered_reward_map_with_policy("arrow_map_90.ppm", rewards_1, policy);
 
 	//mdp_switcher(mdp_1, mdp_2, 2);
-
-	/*PROOF THAT THE VALUE ITERATION WORKS*/
-	// std::vector<std::pair<float, float>> states = {std::pair<float, float>(1, 1),
-	//                                                std::pair<float, float>(1, 1),
-	// 											   std::pair<float, float>(1, 1) };
-	// Eigen::MatrixXd m1(3, 3);
-	// m1 << 0, 1, 0, 0, 1, 0, 0, 0, 1;
-	// Eigen::MatrixXd m2(3, 3);
-	// m2 << 0, 0, 1, 0, 1, 0, 0, 0, 1;
-	// std::vector<Eigen::MatrixXd> transitions = {m1, m2};
-	// Eigen::MatrixXd rewards(3, 2);
-	// rewards << 1, 0.5, 0, 0, 1, 1;
-	// std::vector<std::string> actions = {"a", "b"};
-	// double gamma = 0.9;
-
-	//Eigen::MatrixXd policy = problem.value_iteration();
-
-	//std::cout << policy << std::endl;
-
-	//problem.follow_policy(policy, 1000);
-
-	/*END OF PROOF THAT THE VALUE ITERATION WORKS*/
-
-
-	// std::cout << rewards << std::endl;
-
-	// for(auto m : transitions) {
-	// 	std::cout << m << std::endl;
-	// 	std::cout << m.rows() << " " << m.cols() << std::endl;
-	// }
-	
-	// std::cout << states.size() << std::endl;
-
-	// int i = 0;
-	// for(auto p : states) {
-	// 	std::cout << "State -> " << i++ << " <-> " << p.first << " -- " << p.second << std::endl;
-	// }
-
-	ROS_INFO("Finished");
 
 	return 0;
 }
