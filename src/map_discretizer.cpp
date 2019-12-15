@@ -91,7 +91,7 @@ class mdp {
 		Eigen::MatrixXd Qmax;
 		Eigen::MatrixXd Qa;
 
-		while(error > 1e-8) {
+		while(error > 1e-15) {
 			for(int i=0; i<_actions.size(); i++) {
 				ca = _rewards.col(i);
 				Pa = _transitions[i];
@@ -129,7 +129,7 @@ class mdp {
 		int coef = 0;
 		for(int i=0; i<_states.size(); i++) {
 			for(int j=0; j<_actions.size(); j++) {
-				if(std::fabs(Q(i, j)-J(i))<1e-3) {
+				if(std::fabs(Q(i, j)-J(i))<1e-2) {
 					pi(i, j) = 1;
 					coef++;
 				}
